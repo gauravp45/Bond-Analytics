@@ -453,16 +453,54 @@ async function main() {
   // Then try BSE
   try {
     const bseBonds = await fetchBSEBonds();
-    // Merge BSE bonds (skip if ISIN already exists from NSE)
-    const existingIsins = new Set(bonds.map(b => b.isin));
-    for (const bseBond of bseBonds) {
-      if (!existingIsins.has(bseBond.isin)) {
-        bonds.push(bseBond);
-        existingIsins.add(bseBond.isin);
+    
+    // Merge BSE into NSE (NSE takes precedence for price if both exist)
+    for (const b of bseBonds) {
+      const existing = bonds.find(x => x.isin === b.isin);
+      if (!existing) {
+        bonds.push(b);
       }
     }
   } catch (err) {
     warn(`BSE merge failed: ${err.message}`);
+  }
+
+  // Try NSDL Master (Structural Details)
+  try {
+    if (fs.existsSync('nsdl_master.csv')) {
+      log('Found nsdl_master.csv! Merging structural details...');
+      const nsdlText = fs.readFileSync('nsdl_master.csv', 'utf-8');
+      const lines = nsdlText.split('\n');
+      if (lines.length > 1) {
+        const headers = lines[0].split(',').map(h => h.trim().toUpperCase());
+        const isinIdx = headers.findIndex(h => h.includes('ISIN'));
+        const couponIdx = headers.findIndex(h => h.includes('COUPON') && h.includes('RATE'));
+        const issueIdx = headers.findIndex(h => h.includes('ALLOTMENT') || h.includes('ISSUE DATE'));
+        const matIdx = headers.findIndex(h => h.includes('MATURITY') || h.includes('REDEMPTION'));
+        const freqIdx = headers.findIndex(h => h.includes('FREQUENCY') || h.includes('INTEREST PAYMENT'));
+
+        if (isinIdx !== -1) {
+          let mergedCount = 0;
+          for (let i = 1; i < lines.length; i++) {
+            const cols = lines[i].split(',').map(c => c.trim().replace(/"/g, ''));
+            if (cols.length > isinIdx) {
+              const isin = cols[isinIdx];
+              const bond = bonds.find(b => b.isin === isin);
+              if (bond) {
+                if (couponIdx !== -1 && cols[couponIdx]) bond.couponRate = parseFloat(cols[couponIdx]) || bond.couponRate;
+                if (issueIdx !== -1 && cols[issueIdx]) bond.issueDate = cols[issueIdx];
+                if (matIdx !== -1 && cols[matIdx]) bond.maturityDate = cols[matIdx];
+                if (freqIdx !== -1 && cols[freqIdx]) bond.frequency = cols[freqIdx];
+                mergedCount++;
+              }
+            }
+          }
+          ok(`Merged structural details for ${mergedCount} bonds from NSDL Master.`);
+        }
+      }
+    }
+  } catch (err) {
+    warn(`NSDL merge failed: ${err.message}`);
   }
 
   if (bonds.length > 0) {

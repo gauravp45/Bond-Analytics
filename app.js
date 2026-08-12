@@ -3724,7 +3724,7 @@ function renderLastIPQuickSelect() {
   const firstIPOverStr = document.getElementById('firstIPDate').value;
 
   // Need at least maturity date to generate IP schedule
-  if (!mdStr) { qs.style.display = 'none'; return; }
+  if (!mdStr || !allotStr) { qs.style.display = 'none'; return; }
 
   const freq     = parseInt(document.getElementById('ipFreq').value) || 4;
   const dateType = document.getElementById('ipDateType').value;
@@ -5217,7 +5217,8 @@ function calculate() {
 
   if (!vdStr || !mdStr) return showError('Enter Value Date and Maturity Date.');
   const _allotCheck = document.getElementById('allotmentDate').value;
-  if (!_allotCheck) return showError('Allotment / Issue Date is required. Please enter the date the bond was originally issued.');
+  // Make issue date truly optional if not doing DOA calculation
+  if (!_allotCheck && accruedFromType === 'doa') return showError('Allotment / Issue Date is required when calculating Accrued Interest from Issue Date.');
   if (isCallable && callDate && callDate <= parseLocalDate(vdStr)) return showError('Call Date must be after Value Date.');
   if (isPutable  && putDate  && putDate  <= parseLocalDate(vdStr)) return showError('Put Date must be after Value Date.');
   if (isNaN(fvPerBond) || fvPerBond <= 0) return showError('Invalid Face Value.');
@@ -6372,7 +6373,7 @@ function onISINSearchInput(val) {
   const issuerFilter = (document.getElementById('filterIssuer').value || '').trim();
   const endsWithFilter = (document.getElementById('filterEndsWith').value || '').trim();
   
-  if (val.length < 3 && issuerFilter.length < 3 && endsWithFilter.length < 3) { 
+  if (val.length === 0 && issuerFilter.length === 0 && endsWithFilter.length === 0 && typeof BONDS_DB === 'undefined') { 
     document.getElementById('isinDropdown').innerHTML = '<div style="padding:12px 14px;font-size:11px;color:var(--text-dim);">Type to search…</div>';
     return; 
   }
