@@ -1,0 +1,32 @@
+name: Daily Bond Database Update
+
+on:
+  schedule:
+    # Runs at 15:00 UTC every day (which is 8:30 PM IST)
+    - cron: '0 15 * * 1-5'
+  workflow_dispatch: # Allows manual trigger from the Actions tab
+
+jobs:
+  update-database:
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Checkout Repository
+      uses: actions/checkout@v3
+      
+    - name: Setup Node.js
+      uses: actions/setup-node@v3
+      with:
+        node-version: '18'
+        
+    - name: Run Unified Data Engine
+      run: node update_bonds_v2.js
+      
+    - name: Commit and Push changes
+      run: |
+        git config --global user.name 'BondCalc Automator'
+        git config --global user.email 'bondcalc@actions.github.com'
+        git add bonds_database.js
+        # Only commit if there are changes
+        git commit -m "Auto-update: Latest Bond Market Data (NSE/BSE/NSDL)" || echo "No changes to commit"
+        git push
