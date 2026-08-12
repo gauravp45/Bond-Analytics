@@ -347,8 +347,8 @@ async function fetchBSEBonds() {
     
     const d = String(today.getDate()).padStart(2, '0');
     const m = String(today.getMonth() + 1).padStart(2, '0');
-    const y = String(today.getFullYear()).slice(-2);
-    const bseUrl = `https://www.bseindia.com/download/BhavCopy/Debt/EQ_DEBT_${d}${m}${y}_CSV.ZIP`;
+    const fullYear = today.getFullYear();
+    const bseUrl = `https://www.bseindia.com/download/BhavCopy/Debt/DEBTBHAVCOPY${d}${m}${fullYear}.zip`;
     const zipFile = 'bse.zip';
     
     log(`Downloading BSE ZIP: ${bseUrl}`);
@@ -364,33 +364,44 @@ async function fetchBSEBonds() {
     
     const fs = require('fs');
     if (fs.existsSync('bse_out')) {
-      const bseCsv = fs.readdirSync('bse_out').find(f => f.toUpperCase().endsWith('.CSV'));
-      if (bseCsv) {
+      const bseCsvs = fs.readdirSync('bse_out').filter(f => f.toUpperCase().endsWith('.CSV'));
+      for (const bseCsv of bseCsvs) {
         const csvData = fs.readFileSync('bse_out/' + bseCsv, 'utf-8');
         const lines = csvData.split('\n');
+        if (lines.length < 2) continue;
+        
+        const headers = lines[0].split(',').map(h => h.trim().toUpperCase());
+        const isinIdx = headers.findIndex(h => h.includes('ISIN'));
+        const priceIdx = headers.findIndex(h => h === 'CLOSE PRICE' || h === 'LTP' || h === 'LAST');
+        const nameIdx = headers.findIndex(h => h === 'SC_NAME' || h === 'ISSUER NAME');
+        
+        if (isinIdx === -1 || priceIdx === -1) continue;
+        
         for (let i = 1; i < lines.length; i++) {
           const cols = lines[i].split(',').map(c => c.trim());
-          if (cols.length > 5) {
-            const isin = cols[1]; // Often SC_NAME holds the ISIN or Ticker
+          if (cols.length > isinIdx) {
+            const isin = cols[isinIdx];
             if (isin && isin.startsWith('IN')) {
                bonds.push({
                  isin: isin,
                  last4: isin.slice(-4),
-                 name: cols[2] || isin,
+                 name: (nameIdx !== -1 && cols[nameIdx]) ? cols[nameIdx] : isin,
                  issuer: 'BSE Traded',
-                 faceValue: 1000,
+                 faceValue: 1000, // Default fallback
                  couponRate: 0,
                  maturityDate: '',
                  issueDate: '',
                  frequency: 'Semi-Annual',
                  rating: '',
                  bondType: 'Corporate',
-                 lastPrice: parseFloat(cols[7]) || null,
+                 lastPrice: parseFloat(cols[priceIdx]) || null,
                  ytm: null
                });
             }
           }
         }
+      }
+      if (bonds.length > 0) {
         ok(`Parsed ${bonds.length} bonds from BSE.`);
       }
     }
