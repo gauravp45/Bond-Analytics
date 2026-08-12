@@ -467,6 +467,16 @@ async function main() {
 
   // Try NSDL Master (Structural Details)
   try {
+    const { execSync } = require('child_process');
+    if (fs.existsSync('nsdl_master.zip')) {
+      log('Found nsdl_master.zip! Extracting...');
+      try {
+        execSync(`unzip -o -q nsdl_master.zip`, { stdio: 'ignore' });
+      } catch(e) {
+        execSync(`powershell Expand-Archive -Path nsdl_master.zip -DestinationPath . -Force`, { stdio: 'ignore' });
+      }
+    }
+
     if (fs.existsSync('nsdl_master.csv')) {
       log('Found nsdl_master.csv! Merging structural details...');
       const nsdlText = fs.readFileSync('nsdl_master.csv', 'utf-8');
