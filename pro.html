@@ -1,0 +1,2789 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>BondCalc — Fixed Income Analytics</title>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Space+Grotesk:wght@400;500;600;700&family=JetBrains+Mono:wght@300;400;500&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<!-- TOP NAV -->
+<div class="top-nav">
+  <div class="nav-brand">
+    <div class="nav-logo">B</div>
+    <div>
+      <div class="nav-title">BondCalc</div>
+    </div>
+  </div>
+  <div class="nav-right">
+    <button id="themeToggle" onclick="toggleTheme()"
+      title="Toggle light / dark mode"
+      style="
+        background:var(--surface); border:1px solid var(--border);
+        border-radius:8px; padding:6px 10px; cursor:pointer;
+        font-size:14px; line-height:1; transition:all 0.2s;
+        display:flex; align-items:center; gap:6px;
+        color:var(--text-dim); font-family:'Inter',sans-serif;
+        font-size:11px; font-weight:500; letter-spacing:0.3px;
+      "
+      onmouseover="this.style.borderColor='var(--accent)';this.style.color='var(--accent2)'"
+      onmouseout="this.style.borderColor='var(--border)';this.style.color='var(--text-dim)'">
+      <span id="themeIcon">☀️</span>
+      <span id="themeLabel">Light</span>
+    </button>
+    <div id="dbStatusBadge" class="header-badge" style="cursor:pointer;" onclick="alert(typeof BONDS_DB !== 'undefined' ? 'Local DB loaded! ' + BONDS_DB.count + ' bonds.\\nLast updated: ' + BONDS_DB.lastUpdatedDisplay : 'Local DB not loaded.')" title="Bond Database Status">
+      DB: Loading...
+    </div>
+    <div class="header-badge" id="dayCountBadge">Acts / Acts</div>
+  </div>
+</div>
+
+<div class="page">
+
+<!-- TOOLBAR -->
+<div class="toolbar">
+  <!-- ISIN Search -->
+  <div style="display:flex;align-items:center;gap:6px;flex:1;max-width:420px;position:relative;" id="searchContainer">
+    <div style="position:relative;flex:1;">
+      <input type="text" id="isinSearchInput"
+        placeholder="Search ISIN or bond name… (e.g. IN0020230044)"
+        style="width:100%;padding:8px 36px 8px 12px;border:1px solid var(--border);border-radius:8px;
+               background:var(--surface);color:var(--text);font-family:'JetBrains Mono',monospace;
+               font-size:12px;outline:none;transition:border-color 0.2s;"
+        oninput="onISINSearchInput(this.value)"
+        onfocus="this.style.borderColor='var(--accent)'; document.getElementById('searchDropdownWrap').style.display='block';"
+        />
+      <span style="position:absolute;right:10px;top:50%;transform:translateY(-50%);color:var(--text-dim);font-size:14px;pointer-events:none;">🔍</span>
+    </div>
+    
+    <!-- Results dropdown -->
+    <div id="searchDropdownWrap" style="display:none;position:absolute;top:calc(100% + 4px);left:0;right:0;
+         background:var(--card);border:1px solid var(--border-bright);border-radius:10px;
+         box-shadow:0 8px 32px rgba(0,0,0,0.4);z-index:300;overflow:hidden;">
+      
+      <!-- Filter Inputs -->
+      <div style="padding:10px;border-bottom:1px solid var(--border);display:flex;gap:8px;background:var(--surface);">
+        <input type="text" id="filterIssuer" placeholder="Issuer (e.g. HDFC)" 
+          style="flex:1;padding:6px 10px;font-size:11px;border:1px solid var(--border);border-radius:6px;background:var(--card);color:var(--text);outline:none;font-family:'JetBrains Mono',monospace;" 
+          oninput="onISINSearchInput(document.getElementById('isinSearchInput').value)" />
+        <input type="text" id="filterEndsWith" placeholder="ISIN ends with..." 
+          style="flex:1;padding:6px 10px;font-size:11px;border:1px solid var(--border);border-radius:6px;background:var(--card);color:var(--text);outline:none;font-family:'JetBrains Mono',monospace;" 
+          oninput="onISINSearchInput(document.getElementById('isinSearchInput').value)" />
+      </div>
+      
+      <div id="isinDropdown" style="max-height:300px;overflow-y:auto;">
+        <div style="padding:12px 14px;font-size:11px;color:var(--text-dim);">Type to search…</div>
+      </div>
+    </div>
+  </div>
+  <div id="isinStatusBadge" style="display:none;font-size:10px;padding:4px 10px;border-radius:20px;
+       font-family:'JetBrains Mono',monospace;white-space:nowrap;"></div>
+
+  <div class="sb-wrap" id="sbWrap">
+    <div class="sb-trigger" id="sbTrigger" onclick="toggleSbDropdown()">
+      📂 Saved Bonds <span class="sb-count" id="sbCount">0</span>
+    </div>
+    <div class="sb-dropdown" id="sbDropdown">
+      <div class="sb-search-wrap">
+        <input class="sb-search" id="sbSearch" type="text"
+          placeholder="Search by name, ISIN, coupon, maturity…"
+          oninput="renderSbList()" autocomplete="off" />
+      </div>
+      <div class="sb-list" id="sbList">
+        <div class="sb-empty">No saved bonds yet</div>
+      </div>
+    </div>
+  </div>
+  <div class="toolbar-right">
+    <button class="preset-btn" onclick="saveBond()" title="Save current bond details">💾 Save</button>
+    <button class="preset-btn" onclick="showPortfolioManager()" title="Open Portfolio Manager" style="border-color:#f59e0b;color:#b45309;">📊 Portfolio</button>
+    <button class="preset-btn" onclick="clearCalc()" title="Reset price/XIRR and results only">✕ Clear</button>
+    <button class="preset-btn" onclick="newBond()" title="Start fresh — clears everything">+ New Bond</button>
+  </div>
+</div>
+
+<div class="layout">
+  <!-- COL 1: Bond Identity & Trade -->
+  <div>
+    <div style="position:sticky;top:0;z-index:10;background:var(--bg);padding:4px 0 6px;margin-bottom:2px;border-bottom:1px solid var(--border);">
+      <span style="font-size:9px;font-weight:600;letter-spacing:0.08em;text-transform:uppercase;color:var(--text-dim);">Bond Identity &amp; Trade</span>
+    </div>
+    <div class="card">
+      <div class="card-title">Bond Parameters</div>
+
+      <!-- Bond Mode Toggle -->
+      <div class="bond-mode-toggle" style="margin-bottom:14px;">
+        <button class="bond-mode-btn active" id="modeRegularBtn" onclick="setBondMode('regular')">Regular</button>
+        <button class="bond-mode-btn" id="modeCumulBtn" onclick="setBondMode('cumulative')">Cumulative</button>
+        <button class="bond-mode-btn" id="modeZcbBtn" onclick="setBondMode('zcb')">Zero Coupon</button>
+        <button class="bond-mode-btn" id="modeGsecBtn" onclick="setBondMode('gsec')">G-Sec / SDL</button>
+        <button class="bond-mode-btn" id="modeTfbBtn" onclick="setBondMode('taxfree')">Tax-Free</button>
+      </div>
+      <!-- Compounding frequency — shown only in cumulative mode -->
+      <div class="field" id="cumulCompoundField" style="display:none;">
+        <label>Compounding Frequency</label>
+        <select id="cumulCompound">
+          <option value="1">Annual</option>
+          <option value="2">Semi-Annual</option>
+          <option value="4">Quarterly</option>
+          <option value="12">Monthly</option>
+        </select>
+        <div class="field-hint">How often interest is compounded and added to principal</div>
+      </div>
+      <!-- Tax slab — shown only in cumulative mode -->
+      <div class="field" id="cumulTaxField" style="display:none;">
+        <label>Income Tax Slab Rate</label>
+        <select id="cumulTaxSlab">
+          <option value="nil">NIL — Form 15G/15H (no TDS, no tax)</option>
+          <option value="0.05">5%</option>
+          <option value="0.10">10%</option>
+          <option value="0.15">15%</option>
+          <option value="0.20">20%</option>
+          <option value="0.25">25%</option>
+          <option value="0.30" selected>30%</option>
+        </select>
+        <div class="field-hint">Annual accrual taxed at slab. LTCG (>12 months) at 12.5% flat on capital gain.</div>
+      </div>
+
+      <!-- G-Sec fields — shown only in G-Sec mode -->
+      <div id="gsecFields" style="display:none;">
+        <div style="padding:8px 10px;background:rgba(14,165,233,0.06);border:1px solid rgba(14,165,233,0.2);border-radius:8px;margin-bottom:12px;font-size:10px;color:var(--accent2);line-height:1.7;">
+          <strong>G-Sec / SDL Mode</strong> — Auto-configured: 30/360 · Semi-annual · FV ₹100 · No stamp duty · No record date · No callable/put<br>
+          <span style="color:var(--text-dim);">SDL (State Dev Loans) share same characteristics — issued by respective state govts. YTM in semi-annual basis per FIMMDA.</span>
+        </div>
+        <div class="field">
+          <label>YTM Periodicity (Display)</label>
+          <select id="gsecPeriodicity">
+            <option value="2" selected>Semi-Annual (FIMMDA standard)</option>
+            <option value="1">Annual (Effective Annual Rate)</option>
+            <option value="4">Quarterly</option>
+          </select>
+          <div class="field-hint">Converts the calculated XIRR into the selected compounding convention for display</div>
+        </div>
+        <div class="field">
+          <label>Benchmark G-Sec / SDL YTM (%) <span style="font-size:9px;color:var(--text-dim);font-weight:400;">(Optional)</span></label>
+          <div class="sfx-wrap">
+            <input type="number" id="gsecBenchmark" step="any" min="0" placeholder="e.g. 6.85" />
+            <span class="sfx">%</span>
+          </div>
+          <div class="field-hint">Enter a benchmark G-Sec or SDL yield to display the spread over benchmark</div>
+        </div>
+      </div>
+
+      <!-- Tax-Free Bond fields — shown only in Tax-Free mode -->
+      <div id="tfbFields" style="display:none;">
+        <div style="padding:8px 10px;background:var(--green-bg);border:1px solid rgba(16,185,129,0.25);border-radius:8px;margin-bottom:12px;font-size:10px;color:var(--green);line-height:1.7;">
+          <strong>Tax-Free Bond Mode</strong> — Coupon is fully exempt u/s 10(15)(iv)(h). No TDS. No income tax on interest.<br>
+          <span style="color:var(--text-dim);">Issuers: NHAI · IRFC · PFC · REC · HUDCO · NTPC · NHB · IIFCL. Capital gains still apply on sale/maturity.</span>
+        </div>
+        <div class="field">
+          <label>LTCG Rate on Capital Gain</label>
+          <select id="tfbLTCGRate">
+            <option value="0.10" selected>10% (Tax-Free Bonds — pre-2024 LTCG rate)</option>
+            <option value="0.125">12.5% (Post Finance Act 2024)</option>
+          </select>
+          <div class="field-hint">LTCG if held &gt;12 months. STCG at slab rate if held ≤12 months.</div>
+        </div>
+      </div>
+
+      <!-- ZCB fields — shown only in ZCB mode -->
+      <div id="zcbFields" style="display:none;">
+        <div class="field">
+          <label>ZCB Type — Notified under Sec 2(48)?</label>
+          <select id="zcbNotified" onchange="onZcbNotifiedChange()">
+            <option value="no" selected>Non-Notified — Interest income · 10% TDS u/s 193 · slab</option>
+            <option value="yes">Notified (Sec 2(48)) — Capital gain only · no TDS · LTCG/STCG</option>
+          </select>
+          <div class="field-hint" id="zcbNotifiedHint">Non-notified ZCB: Differential between issue and redemption is treated as interest income (taxed at slab). 10% TDS u/s 193 typically applies at redemption.</div>
+        </div>
+        <div class="field" id="zcbTaxSlabField">
+          <label>Tax Slab Rate</label>
+          <select id="zcbTaxSlab">
+            <option value="nil">NIL — Form 15G/15H</option>
+            <option value="0.05">5%</option>
+            <option value="0.10">10%</option>
+            <option value="0.15">15%</option>
+            <option value="0.20">20%</option>
+            <option value="0.25">25%</option>
+            <option value="0.30" selected>30%</option>
+          </select>
+          <div class="field-hint">Used for annual accrual tax (regular ZCB) and STCG (notified ZCB if held ≤12 months)</div>
+        </div>
+      </div>
+
+      <div class="field-row">
+        <div class="field" style="flex:2;">
+          <label>Security Name</label>
+          <input type="text" id="secName" placeholder="e.g. 10.4% UGRO Capital 2027" />
+        </div>
+        <div class="field">
+          <label>ISIN</label>
+          <input type="text" id="isin" placeholder="e.g. INE123A07001" maxlength="12" style="text-transform:uppercase;" oninput="this.value=this.value.toUpperCase()" />
+        </div>
+      </div>
+      <div class="field-row">
+        <div class="field">
+          <label>Security Type</label>
+          <select id="bondType">
+            <option value="SENIOR SECURED">Senior Secured</option>
+            <option value="SENIOR UNSECURED">Senior Unsecured</option>
+            <option value="SECURED">Secured</option>
+            <option value="UNSECURED">Unsecured</option>
+          </select>
+        </div>
+        <div class="field">
+          <label>Rating</label>
+          <input type="text" id="bondRating" placeholder="e.g. A/(Stable) by ICRA" />
+        </div>
+      </div>
+      <div class="field-row">
+        <div class="field" style="flex:1;">
+          <label>Callable Bond?</label>
+          <select id="isCallable" onchange="onCallableChange()">
+            <option value="no">No — Bullet / Staggered</option>
+            <option value="call">Callable — Issuer has Call Option</option>
+            <option value="put">Putable — Investor has Put Option</option>
+            <option value="both">Both — Call &amp; Put Options</option>
+          </select>
+        </div>
+        <div class="field" id="callDateGroup" style="flex:1;">
+          <label>Call Date</label>
+          <input type="date" id="callDate" />
+          <div class="field-hint">Issuer may redeem all remaining principal on this date</div>
+        </div>
+      </div>
+      <div class="field-row" id="putDateGroup">
+        <div class="field" style="flex:1;">
+          <label>Put Date</label>
+          <input type="date" id="putDate" />
+          <div class="field-hint">Investor may sell bond back to issuer at par on this date</div>
+        </div>
+      </div>
+      <div class="field-row">
+        <div class="field">
+          <label>Allotment / Issue Date <span style="font-size:9px;color:var(--red);font-weight:500;">*required</span></label>
+          <input type="date" id="allotmentDate" onchange="syncAllotmentToDOA()" />
+          <div class="field-hint">Date bond was originally issued / allotted</div>
+        </div>
+        <div class="field"></div>
+      </div>
+      <div class="field-row">
+        <div class="field">
+          <label>Value / Settlement Date</label>
+          <input type="date" id="valueDate" onchange="checkRecordDate(); renderLastIPQuickSelect();" />
+        </div>
+        <div class="field">
+          <label>Maturity Date</label>
+          <input type="date" id="maturityDate" onchange="if(document.getElementById('ipDateType').value==='manual') updateManualSummary(); renderLastIPQuickSelect();" />
+        </div>
+      </div>
+      <div class="field-row">
+        <div class="field">
+          <label>Face Value (₹) / Bond</label>
+          <input type="number" id="faceValue" value="100000" min="1" />
+        </div>
+        <div class="field">
+          <label>Quantity (Bonds)</label>
+          <input type="number" id="quantity" value="1" min="1" />
+        </div>
+      </div>
+      <div class="field-row">
+        <div class="field">
+          <label>Coupon Rate (%)</label>
+          <div class="sfx-wrap">
+            <input type="number" id="couponRate" step="any" min="0" placeholder="e.g. 10.15" />
+            <span class="sfx">%</span>
+          </div>
+        </div>
+        <!-- Unified calc mode block — adapts labels for Regular / G-Sec modes -->
+        <div id="regularPriceBlock">
+          <div class="field">
+            <label>Calculation Mode</label>
+            <select id="calcMode" onchange="onCalcModeChange()">
+              <option value="priceToXirr" id="calcModeOpt1">Enter Price → Calculate XIRR</option>
+              <option value="xirrToPrice" id="calcModeOpt2">Enter XIRR → Calculate Price (XNPV)</option>
+              <option value="ytmHToPrice" id="calcModeOpt3" style="display:none;">YTM(H) Semi-Annual → Derive Price</option>
+              <option value="ytmAToPrice" id="calcModeOpt4" style="display:none;">YTM(A) Annual → Derive Price</option>
+            </select>
+          </div>
+          <div class="field" id="priceField">
+            <label>Price (% of FV)</label>
+            <div class="sfx-wrap">
+              <input type="number" id="price" step="any" min="0" placeholder="e.g. 99.25"
+                oninput="document.getElementById('priceConfirm').textContent = this.value ? 'Will use: ' + parseFloat(this.value).toFixed(4) + '%' : ''" />
+              <span class="sfx">%</span>
+            </div>
+            <div id="priceConfirm" style="font-size:9px;color:var(--accent);margin-top:3px;font-family:'JetBrains Mono',monospace;"></div>
+          </div>
+          <!-- Regular mode: XIRR input -->
+          <div class="field" id="xirrInputField" style="display:none;">
+            <label>Target XIRR (%)</label>
+            <div class="sfx-wrap">
+              <input type="number" id="xirrInput" step="any" min="0" placeholder="e.g. 10.50" />
+              <span class="sfx">%</span>
+            </div>
+            <div class="field-hint">Price will be derived using XNPV</div>
+          </div>
+          <!-- G-Sec mode: single YTM input (type determined by calcMode option selected) -->
+          <div id="gsecYtmInputBlock" style="display:none;">
+            <div class="field">
+              <label id="gsecYtmInputLbl">Target YTM (%)</label>
+              <div class="sfx-wrap">
+                <input type="number" id="gsecYtmInput" step="any" min="0" placeholder="e.g. 7.0714" />
+                <span class="sfx">%</span>
+              </div>
+              <div class="field-hint" id="gsecYtmInputHint">Price derived using 30/360 bond formula — same as Excel PRICE()</div>
+            </div>
+          </div>
+        </div><!-- end regularPriceBlock -->
+
+        <!-- ZCB mode: calc mode + price or XIRR -->
+        <div id="zcbPriceBlock" style="display:none;">
+          <div class="field">
+            <label>Calculation Mode</label>
+            <select id="zcbCalcMode" onchange="onZcbCalcModeChange()">
+              <option value="priceToXirr">Enter Price (₹) → Calculate XIRR</option>
+              <option value="xirrToPrice">Enter Target XIRR (%) → Derive Price (₹)</option>
+            </select>
+          </div>
+          <div class="field" id="zcbPriceField">
+            <label>Issue / Purchase Price per Bond (₹)</label>
+            <input type="number" id="zcbPrice" step="any" min="0" placeholder="e.g. 51660.00" />
+            <div class="field-hint">Discounted issue price — must be less than Face Value</div>
+          </div>
+          <div class="field" id="zcbXIRRField" style="display:none;">
+            <label>Target XIRR / YTM (%)</label>
+            <div class="sfx-wrap">
+              <input type="number" id="zcbXirrInput" step="any" min="0" placeholder="e.g. 6.85" />
+              <span class="sfx">%</span>
+            </div>
+            <div class="field-hint">Issue price will be derived: Price = FV ÷ (1 + XIRR)^T</div>
+          </div>
+          <div class="field">
+            <label>Original Issue Price per Bond (₹) <span style="font-size:9px;color:var(--text-dim);font-weight:400;">(Optional)</span></label>
+            <input type="number" id="zcbIssuePrice" step="any" min="0" placeholder="e.g. 51660.00" />
+            <div class="field-hint">Price at which bond was originally issued/allotted — used to calculate original allottee's YTM and capital gain if sold before maturity</div>
+          </div>
+        </div><!-- end zcbPriceBlock -->
+        <div class="field" id="ytcInputField" style="display:none;">
+          <label>Target XIRR — Yield to Call (%)</label>
+          <div class="sfx-wrap">
+            <input type="number" id="ytcInput" step="any" min="0" placeholder="e.g. 18.50" />
+            <span class="sfx">%</span>
+          </div>
+          <div class="field-hint">Price derived from call-scenario cash flows (XNPV to call date)</div>
+        </div>
+        <div class="field" id="ytpInputField" style="display:none;">
+          <label>Target XIRR — Yield to Put (%)</label>
+          <div class="sfx-wrap">
+            <input type="number" id="ytpInput" step="any" min="0" placeholder="e.g. 9.50" />
+            <span class="sfx">%</span>
+          </div>
+          <div class="field-hint">Price derived from put-scenario cash flows (XNPV to put date)</div>
+        </div>
+      </div>
+    </div>
+
+
+    <div style="position:sticky;bottom:0;z-index:5;padding:10px 0 4px;background:linear-gradient(transparent,var(--bg) 40%);margin-top:8px;">
+      <button class="btn-calc" onclick="_bondMode==='cumulative'?calculateCumulative():_bondMode==='zcb'?calculateZCB():calculate()">⟶ Generate XIRR &amp; Schedule</button>
+      <div class="error" id="errBox" style="margin-top:6px;"></div>
+    </div>
+  </div><!-- /col1 -->
+
+  <!-- COL 2: Schedule Configs -->
+  <div>
+    <div style="position:sticky;top:0;z-index:10;background:var(--bg);padding:4px 0 6px;margin-bottom:2px;border-bottom:1px solid var(--border);">
+      <span style="font-size:9px;font-weight:600;letter-spacing:0.08em;text-transform:uppercase;color:var(--text-dim);">Schedule &amp; Conventions</span>
+    </div>
+
+    <div class="card" id="cardIPSchedule">
+      <div class="card-title">Interest Payment Schedule</div>
+      <div class="field">
+        <label>IP Frequency</label>
+        <select id="ipFreq" onchange="onFreqChange()">
+          <option value="1">Annual (1×/year)</option>
+          <option value="2">Semi-Annual (2×/year)</option>
+          <option value="4">Quarterly (4×/year)</option>
+          <option value="12" selected>Monthly (12×/year)</option>
+        </select>
+      </div>
+      <div class="field">
+        <label>IP Date Convention</label>
+        <select id="ipDateType" onchange="onDateTypeChange()">
+          <option value="fixed" selected>Fixed Calendar Dates</option>
+          <option value="first">1st of Every Month/Period</option>
+          <option value="last">Last Day of Every Month/Period</option>
+          <option value="dom">Specific Day of Month</option>
+          <option value="manual">Manual Dates (Issuer Discretion)</option>
+        </select>
+      </div>
+      <div class="field" id="grpIpBdAdj" style="display:none;">
+        <label>If IP Date Falls on Non-Business Day</label>
+        <select id="ipBdAdj">
+          <option value="none">No adjustment</option>
+          <option value="preceding">Preceding business day</option>
+          <option value="following">Following (succeeding) business day</option>
+          <option value="modifiedfollowing">Modified Following — Following, unless it crosses month-end → then Preceding</option>
+        </select>
+        <div class="field-hint">Applies to Last Day / 1st / Specific Day conventions. Modified Following is the ISDA standard for most bonds.</div>
+      </div>
+
+      <div id="grpFixed" class="ip-group show">
+        <div class="field">
+          <label>IP Dates (comma-separated)</label>
+          <input type="text" id="fixedDates" placeholder="e.g. 12/Jun, 12/Dec  or  12/06, 12/12  or  12/June, 12/December" oninput="renderLastIPQuickSelect()" />
+          <div class="field-hint">Formats: DD/Mon (12/Jun), DD/MM (12/06), DD/Month (12/June). Monthly = 12 dates, Quarterly = 4 dates</div>
+        </div>
+      </div>
+      <div id="grpDOM" class="ip-group">
+        <div class="field">
+          <label>Day of Month</label>
+          <input type="number" id="domDay" value="24" min="1" max="31" />
+          <div class="field-hint">e.g. 24 → 24th of every month</div>
+        </div>
+      </div>
+
+      <!-- Manual dates group -->
+      <div id="grpManual" class="ip-group">
+        <div class="field">
+          <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px;">
+            <label style="margin-bottom:0;">Payment Dates</label>
+            <div style="display:flex;gap:6px;">
+              <button type="button" onclick="pasteManualDates()" style="background:var(--surface);border:1px solid var(--border);border-radius:3px;padding:4px 9px;font-family:'IBM Plex Mono',monospace;font-size:9px;color:var(--text-dim);cursor:pointer;letter-spacing:0.5px;text-transform:uppercase;" title="Paste a list of dates">⎘ Paste List</button>
+              <button type="button" onclick="addManualDateRow()" style="background:var(--accent);border:none;border-radius:3px;padding:4px 9px;font-family:'IBM Plex Mono',monospace;font-size:9px;color:#fff;cursor:pointer;letter-spacing:0.5px;text-transform:uppercase;">+ Add Date</button>
+            </div>
+          </div>
+          <div id="manualDatesContainer" style="display:flex;flex-direction:column;gap:5px;max-height:280px;overflow-y:auto;padding-right:2px;"></div>
+          <div id="manualDatesSummary" style="margin-top:7px;font-size:9px;color:var(--text-dim);letter-spacing:0.5px;"></div>
+          <div class="field-hint" style="margin-top:4px;">Add each payment date individually. Maturity date is always included automatically.</div>
+        </div>
+      </div>
+
+      <div class="field">
+        <label>Accrued Interest Starting From</label>
+        <select id="accruedFromType" onchange="onAccruedFromChange(); renderLastIPQuickSelect();">
+          <option value="lastip" selected>Last IP Date (existing bond — coupon already paid)</option>
+          <option value="doa">Date of Allotment / DOA (new bond — no coupon paid yet)</option>
+        </select>
+        <div class="field-hint" id="accruedFromHint">Accrued counts from the last coupon payment date</div>
+      </div>
+
+      <div class="field" id="lastIPField">
+        <label id="lastIPLabel">Last IP Date</label>
+        <input type="date" id="lastIP"
+          oninput="checkRecordDate(); renderLastIPQuickSelect();"
+          onchange="checkRecordDate();
+                    if(document.getElementById('accruedFromType').value==='doa') checkFirstIPHint();
+                    renderLastIPQuickSelect();" />
+        <div id="lastIPQuickSelect" style="display:none;margin-top:6px;"></div>
+        <div class="field-hint" id="lastIPHint">Most recent coupon payment date before settlement — or pick from recent IPs below</div>
+      </div>
+
+      <!-- First IP Date override — shown only in DOA mode -->
+      <div class="field ip-group" id="firstIPField">
+        <label>First Interest Payment Date <span style="color:var(--gold);font-size:9px;">(Override)</span></label>
+        <input type="date" id="firstIPDate" onchange="checkFirstIPHint(); checkRecordDate(); renderLastIPQuickSelect();" />
+        <div class="field-hint">
+          If DOA to next regular IP date is &lt; 30 days, issuer may skip it and pay a
+          <strong>long first coupon</strong> on a later date. Leave blank to use the regular schedule.
+        </div>
+        <div id="firstIPHint" style="margin-top:6px;display:none;border-radius:3px;padding:7px 9px;font-size:10px;line-height:1.6;"></div>
+      </div>
+    </div>
+
+    <div class="card" id="cardRedemption">
+      <div class="card-title">Redemption Type</div>
+
+      <div class="field">
+        <label>Principal Repayment Structure</label>
+        <select id="redemptionType" onchange="onRedemptionTypeChange()">
+          <option value="bullet" selected>Bullet — Full Face Value at Maturity</option>
+          <option value="staggered">Staggered — Partial Redemptions over Time</option>
+          <option value="custom">Custom Schedule — Any % on Any IP Date</option>
+        </select>
+        <div class="field-hint" id="redemptionTypeHint">100% of principal returned on maturity date only.</div>
+      </div>
+
+      <div id="grpStaggered" style="display:none;">
+        <div class="field-row">
+          <div class="field">
+            <label>Redemption % per Installment</label>
+            <div class="sfx-wrap">
+              <input type="number" id="stagPct" value="25" step="0.01" min="0.01" max="100" oninput="updateStaggeredPreview()" />
+              <span class="sfx">%</span>
+            </div>
+            <div class="field-hint">% of original face value per payment</div>
+          </div>
+          <div class="field">
+            <label>Redemption Frequency</label>
+            <select id="stagFreq" onchange="updateStaggeredPreview()">
+              <option value="same">Same as IP Frequency</option>
+              <option value="1">Annual</option>
+              <option value="2">Semi-Annual</option>
+              <option value="4">Quarterly</option>
+              <option value="12">Monthly</option>
+            </select>
+          </div>
+        </div>
+
+        <div class="field">
+          <label>Start Redemption From</label>
+          <select id="stagStart" onchange="onStagStartChange()">
+            <option value="firstIP">First IP Date (every IP date carries redemption)</option>
+            <option value="lastN">Last N Payments (count back from maturity)</option>
+            <option value="fromDate">From a Specific IP Date Onwards</option>
+            <option value="fromCoupon">From Coupon # Onwards</option>
+          </select>
+        </div>
+
+        <div id="grpStagLastN" class="field">
+          <label>Number of Redemption Installments</label>
+          <input type="number" id="stagLastN" value="4" min="1" max="360" oninput="updateStaggeredPreview()" />
+          <div class="field-hint">e.g. 4 means last 4 IP dates each carry a redemption</div>
+        </div>
+
+        <div id="grpStagFromDate" class="field" style="display:none;">
+          <label>First Redemption Date</label>
+          <input type="date" id="stagFromDate" onchange="updateStaggeredPreview()" />
+          <div class="field-hint">Redemption begins on this date and every subsequent IP date</div>
+        </div>
+
+        <div id="grpStagFromCoupon" class="field" style="display:none;">
+          <label>Start from Coupon #</label>
+          <input type="number" id="stagFromCoupon" value="1" min="1" oninput="updateStaggeredPreview()" />
+          <div class="field-hint">1 = first IP date, 2 = second, etc.</div>
+        </div>
+
+        <div id="staggeredPreview" class="staggered-preview" style="display:none;"></div>
+      </div>
+
+      <!-- CUSTOM REDEMPTION SCHEDULE -->
+      <div id="grpCustomRedem" style="display:none;">
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px;">
+          <div style="font-size:9px;color:var(--text-dim);letter-spacing:0.8px;text-transform:uppercase;">Redemption Entries</div>
+          <div style="display:flex;gap:5px;">
+            <button type="button" onclick="syncCustomRedemFromIPSchedule(true)"
+              style="background:rgba(26,96,53,0.1);border:1px solid rgba(26,96,53,0.3);border-radius:3px;padding:4px 9px;font-family:'IBM Plex Mono',monospace;font-size:9px;color:var(--accent2);cursor:pointer;letter-spacing:0.5px;text-transform:uppercase;"
+              title="Auto-fill all IP dates from the Interest Payment Schedule — you only enter the % for each">&#8635; Sync IP Dates</button>
+            <button type="button" onclick="openRedemPasteModal()"
+              style="background:var(--surface);border:1px solid var(--border);border-radius:3px;padding:4px 9px;font-family:'IBM Plex Mono',monospace;font-size:9px;color:var(--text-dim);cursor:pointer;letter-spacing:0.5px;text-transform:uppercase;"
+              title="Paste date + % list">&#8663; Paste List</button>
+            <button type="button" onclick="addCustomRedemRow()"
+              style="background:var(--accent);border:none;border-radius:3px;padding:4px 9px;font-family:'IBM Plex Mono',monospace;font-size:9px;color:#fff;cursor:pointer;letter-spacing:0.5px;text-transform:uppercase;">+ Add Row</button>
+          </div>
+        </div>
+        <div class="redem-preset-row">
+          <button class="denom-mini-btn" onclick="addCustomRedemPreset('equal')">&#247; Equal Split</button>
+          <button class="denom-mini-btn" onclick="addCustomRedemPreset('lastN')">Last N IPs</button>
+          <button class="denom-mini-btn" onclick="addCustomRedemPreset('clear')">&#x2715; Clear All</button>
+        </div>
+        <div style="max-height:280px;overflow-y:auto;border:1px solid var(--border);border-radius:3px;">
+          <table class="redem-table">
+            <thead><tr>
+              <th>#</th><th>IP Date</th>
+              <th style="text-align:right">% of FV</th>
+              <th>Note / Label</th><th></th>
+            </tr></thead>
+            <tbody id="customRedemBody"></tbody>
+          </table>
+        </div>
+        <button class="redem-add-btn" onclick="addCustomRedemRow()">+ Add Redemption Entry</button>
+        <div class="redem-total-bar" id="redemTotalBar">
+          <span>Total: <strong id="redemTotal">0.00%</strong></span>
+          <span id="redemTotalMsg">Add entries above</span>
+        </div>
+      </div>
+    </div>
+
+    <div class="card" id="cardRecordDate">
+      <div class="card-title">Record Date &amp; Ex-Dividend</div>
+
+      <div class="field-row">
+        <div class="field">
+          <label>Record Date (days before IP)</label>
+          <select id="rdRule" onchange="onRDChange()">
+            <option value="0">No Record Date (standard)</option>
+            <option value="7">7 days before IP</option>
+            <option value="15" selected>15 days before IP</option>
+            <option value="30">30 days before IP</option>
+            <option value="custom">Custom</option>
+          </select>
+        </div>
+        <div class="field">
+          <label>If RD falls on non-business day</label>
+          <select id="rdBdConv" onchange="checkRecordDate()">
+            <option value="none">No adjustment</option>
+            <option value="preceding">Preceding business day</option>
+            <option value="following">Following (succeeding) business day</option>
+            <option value="modifiedfollowing">Modified Following (ISDA)</option>
+          </select>
+        </div>
+        <div class="field">
+          <label>Weekend Convention</label>
+          <select id="weekendConv" onchange="renderLastIPQuickSelect(); checkRecordDate();">
+            <option value="sat-sun" selected>Saturday &amp; Sunday (both non-working)</option>
+            <option value="sun-only">Sunday Only (Saturday is working day)</option>
+          </select>
+          <div class="field-hint">Applies to all business day adjustments — IP dates and Record dates</div>
+        </div>
+      </div>
+      <div id="grpCustomRD" class="field" style="display:none;">
+        <label>Custom Days Before IP</label>
+        <input type="number" id="customRD" value="15" min="1" max="90" onchange="checkRecordDate()" />
+      </div>
+      <div style="margin-top:8px;background:rgba(26,58,42,0.05);border:1px solid rgba(26,58,42,0.15);border-radius:3px;padding:9px;font-size:10px;color:var(--text-dim);line-height:1.8;">
+        <strong style="color:var(--green);">✓ CUM-DIVIDEND</strong> → Value date <strong>≤</strong> Record date<br>
+        &nbsp;&nbsp;Buyer receives next coupon. Accrued interest <em>added</em> to price.<br>
+        <strong style="color:var(--orange);">⚠ EX-DIVIDEND</strong> → Value date <strong>&gt;</strong> Record date<br>
+        &nbsp;&nbsp;Buyer misses next coupon. Negative accrued <em>credited</em> to buyer.
+      </div>
+
+      <!-- Live accrued status -->
+      <div class="accrued-status" id="accruedStatus"></div>
+
+      <div class="field" style="margin-top:12px;">
+        <label>Show Record Dates in Table</label>
+        <select id="showRD">
+          <option value="yes" selected>Yes</option>
+          <option value="no">No</option>
+        </select>
+      </div>
+    </div>
+
+    <div class="card" id="cardDayCount">
+      <div class="card-title">Day Count Convention</div>
+
+      <div class="field">
+        <label>Interest Calculation Basis</label>
+        <select id="dayCount" onchange="onDayCountChange()">
+          <option value="act365">Acts / 365 (Fixed) — always divide by 365</option>
+          <option value="act366">Acts / 366 (Fixed) — always divide by 366</option>
+          <option value="actactical" selected>Acts / Acts (Calendar Year) — 365 or 366 based on coupon year</option>
+          <option value="actactfy">Acts / Acts (Indian FY) — 365 or 366 based on FY (Apr–Mar)</option>
+          <option value="act360">Acts / 360 — money market convention</option>
+          <option value="30360">30 / 360 — each month = 30 days</option>
+          <option value="custom">Custom Override — set 365 or 366 per period</option>
+        </select>
+        <div class="field-hint" id="dayCountHint">Denominator changes to 366 if coupon period falls in a leap year (calendar year)</div>
+      </div>
+
+      <div class="field" id="fyYearGroup" style="display:none;">
+        <label>FY Leap Year Logic</label>
+        <div style="background:rgba(26,58,42,0.05);border:1px solid rgba(26,58,42,0.12);border-radius:3px;padding:9px;font-size:10px;color:var(--text-dim);line-height:1.7;">
+          Indian FY: <strong>1 Apr → 31 Mar</strong><br>
+          If a coupon period overlaps a leap-year FY (e.g. FY2028-29 where Apr 2028 – Mar 2029 contains Feb 29, 2028), denominator = 366.<br>
+          A FY is leap if its calendar year portion contains Feb 29 — i.e. the <em>earlier</em> calendar year in the FY is a leap year.
+        </div>
+      </div>
+
+      <!-- CUSTOM DENOM OVERRIDE PANEL -->
+      <div id="customDenomPanel" class="field" style="display:none;">
+        <label>Custom Denominator Override</label>
+        <div style="font-size:10px;color:var(--text-dim);line-height:1.6;margin-bottom:10px;">
+          After clicking <strong>Generate</strong>, the Denom column in the cash flow table becomes <strong>editable</strong> &#8212; click any value to toggle between 365 and 366.<br>
+          Use quick presets below to set all at once, then fine-tune individually.
+        </div>
+        <div style="display:flex;gap:5px;flex-wrap:wrap;">
+          <button class="denom-mini-btn" onclick="applyDenomPreset('leapcal')">&#128197; Full Leap Year</button>
+          <button class="denom-mini-btn" onclick="applyDenomPreset('leapfy')">&#128197; Leap FY (Apr&#8211;Mar)</button>
+          <button class="denom-mini-btn" onclick="applyDenomPreset('leapq1')">Q1 Leap (Jan/Feb/Mar)</button>
+          <button class="denom-mini-btn" onclick="applyDenomPreset('all366')">All &#8594; 366</button>
+          <button class="denom-mini-btn" onclick="applyDenomPreset('reset')">Reset &#8594; 365</button>
+        </div>
+        <div id="denomPillContainer" style="margin-top:10px;"></div>
+        <div style="margin-top:8px;font-size:9px;color:var(--text-dim);padding:6px;background:rgba(26,58,42,0.04);border-radius:3px;border:1px solid var(--border-light);">
+          &#128161; Tip: Click any <strong>Denom cell</strong> in the schedule table to toggle 365 &#8596; 366 for that specific period.
+        </div>
+      </div>
+
+      <!-- CUSTOM DENOM OVERRIDE PANEL -->
+      <div id="customDenomPanel" class="field" style="display:none;">
+        <label>Custom Denominator Override</label>
+        <div style="font-size:10px;color:var(--text-dim);line-height:1.6;margin-bottom:10px;">
+          After clicking <strong>Generate</strong>, the Denom column becomes <strong>editable</strong> — click any value to toggle between 365 and 366.<br>
+          Use quick presets below to set all at once, then fine-tune individually.
+        </div>
+        <div style="display:flex;gap:5px;flex-wrap:wrap;">
+          <button class="denom-mini-btn" onclick="applyDenomPreset('leapcal')">&#128197; Full Leap Year</button>
+          <button class="denom-mini-btn" onclick="applyDenomPreset('leapfy')">&#128197; Leap FY (Apr&#8211;Mar)</button>
+          <button class="denom-mini-btn" onclick="applyDenomPreset('leapq1')">Q1 Leap (Jan/Feb/Mar)</button>
+          <button class="denom-mini-btn" onclick="applyDenomPreset('all366')">All &#8594; 366</button>
+          <button class="denom-mini-btn" onclick="applyDenomPreset('reset')">Reset &#8594; 365</button>
+        </div>
+        <div id="denomPillContainer" style="margin-top:10px;"></div>
+        <div style="margin-top:8px;font-size:9px;color:var(--text-dim);padding:6px;background:rgba(26,58,42,0.04);border-radius:3px;border:1px solid var(--border-light);">
+          &#128161; Tip: Click any <strong>Denom cell</strong> in the schedule table to toggle 365 &#8596; 366 for that specific period.
+        </div>
+      </div>
+
+      <div class="field">
+        <label>Stamp Duty Rate (%)</label>
+        <div class="sfx-wrap">
+          <input type="number" id="stampDuty" value="0.0001" step="0.00001" />
+          <span class="sfx">%</span>
+        </div>
+        <div class="field-hint">0.0001% = ₹1 per ₹10L (SEBI default)</div>
+      </div>
+      <div class="field" id="taxXirrFields">
+        <label>Income Tax Slab <span style="font-size:9px;color:var(--text-dim);font-weight:400;">(for Post-Tax XIRR)</span></label>
+        <select id="bondTaxSlab" onchange="onBondTaxSlabChange()">
+          <option value="nil">NIL — Form 15G/15H filed (no TDS, no tax)</option>
+          <option value="0.05">5%</option>
+          <option value="0.10">10%</option>
+          <option value="0.15">15%</option>
+          <option value="0.20">20%</option>
+          <option value="0.25">25%</option>
+          <option value="0.30" selected>30%</option>
+        </select>
+        <div class="field-hint">Used to compute In-Hand XIRR (after TDS) and True Post-Tax XIRR (full slab)</div>
+      </div>
+    </div>
+
+
+    <div class="card" id="saleInputCard" style="">
+      <div class="card-title" style="justify-content:space-between;display:flex;align-items:center;">
+        <span>Early Sale (Optional)</span>
+        <label style="font-size:9px;font-family:'IBM Plex Mono',monospace;letter-spacing:.5px;color:var(--text-dim);cursor:pointer;display:flex;align-items:center;gap:5px;">
+          <input type="checkbox" id="enableSale" onchange="onEnableSaleChange()" style="cursor:pointer;" />
+          ENABLE SALE CALC
+        </label>
+      </div>
+      <div id="saleFields" style="display:none;">
+        <div class="field-row">
+          <div class="field">
+            <label>Sell Settlement Date</label>
+            <input type="date" id="sellDate" onchange="if(document.getElementById('sellInputMode')&&document.getElementById('sellInputMode').value!=='price'){deriveSellPrice();}else{calculateSale();}" />
+          </div>
+          <div class="field">
+            <label>Sell Input Mode</label>
+            <select id="sellInputMode" onchange="onSellInputModeChange()">
+              <option value="price">Enter Sell Price (% of FV)</option>
+              <option value="ytm">Enter YTM → Derive Price</option>
+              <!-- YTC / YTP options injected dynamically by updateSellModeOptions() -->
+            </select>
+          </div>
+        </div>
+        <!-- Sell Price input (default) -->
+        <div class="field" id="sellPriceField">
+          <label>Sell Price (% of FV)</label>
+          <div class="sfx-wrap">
+            <input type="number" id="sellPrice" step="any" min="0" placeholder="e.g. 98.50" />
+            <span class="sfx">%</span>
+          </div>
+          <div class="field-hint">Price at which you sell the bond</div>
+        </div>
+        <!-- Sell Yield input (shown when YTM/YTC/YTP selected) -->
+        <div class="field" id="sellYieldField" style="display:none;">
+          <label id="sellYieldLabel">Sell YTM (%)</label>
+          <div class="sfx-wrap">
+            <input type="number" id="sellYield" step="any" min="0" placeholder="e.g. 10.50" oninput="deriveSellPrice()" />
+            <span class="sfx">%</span>
+          </div>
+          <div class="field-hint" id="sellYieldHint">Price will be derived using XNPV from sell date to maturity</div>
+          <div id="sellDerivedPrice" style="display:none;margin-top:5px;padding:5px 8px;border-radius:3px;font-size:10px;background:rgba(26,96,53,0.07);border:1px solid rgba(26,96,53,0.2);color:var(--accent2);"></div>
+        </div>
+        <div class="field">
+          <label>Applicable Tax Slab (for STCG)</label>
+          <select id="taxSlab">
+            <option value="0.05">5%</option>
+            <option value="0.10">10%</option>
+            <option value="0.15">15%</option>
+            <option value="0.20">20%</option>
+            <option value="0.25">25%</option>
+            <option value="0.30" selected>30%</option>
+          </select>
+          <div class="field-hint">STCG ≤ 12 months → slab rate. LTCG > 12 months → 12.5% flat.</div>
+        </div>
+      </div>
+    </div>
+
+  </div><!-- /col2 -->
+
+  <!-- COL 3: Results -->
+  <div style="height:100%;overflow-y:auto;padding-bottom:20px;">
+    <div style="position:sticky;top:0;z-index:10;background:var(--bg);padding:4px 0 6px;border-bottom:1px solid var(--border);">
+      <span style="font-size:9px;font-weight:600;letter-spacing:0.08em;text-transform:uppercase;color:var(--text-dim);">Results &amp; Cash Flow</span>
+    </div>
+    <div id="resultsPlaceholder" style="display:flex;flex-direction:column;align-items:center;justify-content:center;height:60%;min-height:300px;opacity:0.35;">
+      <div style="font-size:32px;margin-bottom:12px;">⟶</div>
+      <div style="font-size:13px;font-weight:500;color:var(--text);">Fill parameters and click</div>
+      <div style="font-size:11px;color:var(--text-dim);margin-top:4px;">Generate XIRR &amp; Schedule</div>
+    </div>
+  <!-- RIGHT: RESULTS -->
+  <!-- ZCB RESULTS -->
+  <div id="zcbResultsPanel" style="display:none;">
+    <div class="card" style="margin-bottom:14px;">
+      <div class="card-title" style="justify-content:space-between;display:flex;align-items:center;">
+        <span id="zcbResultTitle">Zero Coupon Bond — Summary</span>
+        <span id="zcbNotifiedBadge" style="display:none;background:var(--green-bg);color:var(--green);border:1px solid rgba(16,185,129,0.3);border-radius:20px;padding:2px 10px;font-size:9px;font-weight:600;letter-spacing:0.5px;">✓ NOTIFIED ZCB</span>
+      </div>
+      <div class="result-hero">
+        <div>
+          <div class="rh-label">XIRR (to Maturity)</div>
+          <div class="rh-val accent-val" id="zcbXIRR">—</div>
+          <div class="rh-sub" id="zcbXIRRSub">—</div>
+        </div>
+        <div>
+          <div class="rh-label">Face Value (at Maturity)</div>
+          <div class="rh-val" id="zcbFVTotal">—</div>
+          <div class="rh-sub" id="zcbFVSub">—</div>
+        </div>
+        <div>
+          <div class="rh-label">Total Gain</div>
+          <div class="rh-val" id="zcbGain">—</div>
+          <div class="rh-sub" id="zcbGainSub">—</div>
+        </div>
+      </div>
+      <div class="metrics-grid">
+        <div class="m-box">
+          <div class="m-lbl">Purchase Price (total)</div>
+          <div class="m-val" id="zcbPurchaseTotal">—</div>
+          <div class="m-sub" id="zcbPurchaseSub">—</div>
+        </div>
+        <div class="m-box">
+          <div class="m-lbl">Stamp Duty</div>
+          <div class="m-val" id="zcbStamp">—</div>
+          <div class="m-sub" id="zcbStampSub">—</div>
+        </div>
+        <div class="m-box teal">
+          <div class="m-lbl">Settlement</div>
+          <div class="m-val teal" id="zcbSettlement">—</div>
+          <div class="m-sub">Purchase Price + Stamp Duty</div>
+        </div>
+        <div class="m-box">
+          <div class="m-lbl">Accreted Value at VD</div>
+          <div class="m-val" id="zcbAccreted">—</div>
+          <div class="m-sub" id="zcbAccretedSub">Purchase Price × (1+YTM)^t</div>
+        </div>
+        <div class="m-box">
+          <div class="m-lbl">Holding Period</div>
+          <div class="m-val" id="zcbHolding">—</div>
+          <div class="m-sub" id="zcbHoldingSub">—</div>
+        </div>
+        <div class="m-box gold">
+          <div class="m-lbl">Discount to FV</div>
+          <div class="m-val gold" id="zcbDiscount">—</div>
+          <div class="m-sub" id="zcbDiscountSub">FV − Purchase Price per bond</div>
+        </div>
+        <div class="m-box" id="zcbIssuePriceBox" style="display:none;">
+          <div class="m-lbl">Original Issue Price</div>
+          <div class="m-val" id="zcbIssuePriceVal">—</div>
+          <div class="m-sub" id="zcbIssuePriceSub">—</div>
+        </div>
+        <div class="m-box purple" id="zcbYTMIssueBox" style="display:none;">
+          <div class="m-lbl">YTM at Issue (Original)</div>
+          <div class="m-val purple" id="zcbYTMIssue">—</div>
+          <div class="m-sub" id="zcbYTMIssueSub">—</div>
+        </div>
+        <div class="m-box" id="zcbAllotteeGainBox" style="display:none;">
+          <div class="m-lbl">Allottee Capital Gain (if selling now)</div>
+          <div class="m-val" id="zcbAllotteeGain">—</div>
+          <div class="m-sub" id="zcbAllotteeGainSub">—</div>
+        </div>
+        <div class="m-box green" id="zcbAllotteeNetBox" style="display:none;">
+          <div class="m-lbl">Allottee Net (post-tax)</div>
+          <div class="m-val green" id="zcbAllotteeNet">—</div>
+          <div class="m-sub" id="zcbAllotteeNetSub">—</div>
+        </div>
+      </div>
+      <div class="formula-note" id="zcbFNote" style="margin-top:12px;"></div>
+    </div>
+
+    <!-- ZCB Tax Card -->
+    <div class="card" id="zcbTaxCard" style="margin-bottom:14px;">
+      <div class="card-title" style="justify-content:space-between;display:flex;align-items:center;">
+        <span id="zcbTaxTitle">Tax Analysis</span>
+        <span id="zcbTaxBadge" style="font-size:9px;font-family:'JetBrains Mono',monospace;color:var(--text-dim);"></span>
+      </div>
+      <!-- Regular ZCB tax panel -->
+      <div id="zcbTaxRegular">
+        <div style="font-size:10px;color:var(--text-dim);line-height:1.7;margin-bottom:10px;padding:8px 10px;background:var(--red-bg);border:1px solid rgba(244,63,94,0.15);border-radius:8px;">
+          Section 145A applies — annual accrual of discount is taxable as interest income at slab rate, even though no cash is received.
+        </div>
+        <div class="table-wrap">
+          <table>
+            <thead><tr>
+              <th style="width:32px">#</th>
+              <th style="width:80px">Period</th>
+              <th class="r">Open Value</th>
+              <th class="r">Close Value</th>
+              <th class="r">Accrual</th>
+              <th class="r">Tax @ Slab</th>
+              <th class="r">Net</th>
+            </tr></thead>
+            <tbody id="zcbTaxBody"></tbody>
+          </table>
+        </div>
+        <div class="formula-note" id="zcbTaxNote" style="margin-top:10px;"></div>
+      </div>
+      <!-- Notified ZCB tax panel -->
+      <div id="zcbTaxNotified" style="display:none;">
+        <div style="font-size:10px;color:var(--text-dim);line-height:1.7;margin-bottom:10px;padding:8px 10px;background:var(--green-bg);border:1px solid rgba(16,185,129,0.2);border-radius:8px;">
+          ✓ Notified ZCB — No annual accrual tax. Entire gain treated as Capital Gain only at maturity or sale.
+        </div>
+        <div class="metrics-grid">
+          <div class="m-box green">
+            <div class="m-lbl">Capital Gain at Maturity</div>
+            <div class="m-val green" id="zcbNotifGain">—</div>
+            <div class="m-sub">FV Total − Purchase Price</div>
+          </div>
+          <div class="m-box">
+            <div class="m-lbl" id="zcbNotifCGType">LTCG Tax (12.5%)</div>
+            <div class="m-val red" id="zcbNotifTax">—</div>
+            <div class="m-sub" id="zcbNotifTaxSub">—</div>
+          </div>
+          <div class="m-box teal">
+            <div class="m-lbl">Net in Hand</div>
+            <div class="m-val teal" id="zcbNotifNet">—</div>
+            <div class="m-sub" id="zcbNotifNetSub">FV − Tax</div>
+          </div>
+          <div class="m-box gold">
+            <div class="m-lbl">Tax Saving vs Regular ZCB</div>
+            <div class="m-val gold" id="zcbNotifSaving">—</div>
+            <div class="m-sub" id="zcbNotifSavingSub">vs annual accrual at slab</div>
+          </div>
+        </div>
+        <div class="formula-note" id="zcbNotifNote" style="margin-top:10px;"></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- CUMULATIVE RESULTS -->
+  <div id="cumulResultsPanel" style="display:none;">
+    <div class="card" style="margin-bottom:14px;">
+      <div class="card-title">Summary</div>
+      <div class="cumul-hero">
+        <div>
+          <div class="rh-label">XIRR (Annualised)</div>
+          <div class="rh-val" id="cumulXIRR">—</div>
+          <div class="rh-sub" id="cumulXIRRSub">—</div>
+        </div>
+        <div>
+          <div class="rh-label">Maturity Value</div>
+          <div class="rh-val" id="cumulMatVal">—</div>
+          <div class="rh-sub" id="cumulMatValSub">—</div>
+        </div>
+        <div>
+          <div class="rh-label" id="cumulHeroRightLbl">Price Paid</div>
+          <div class="rh-val" id="cumulPricePaid">—</div>
+          <div class="rh-sub" id="cumulPricePaidSub">—</div>
+        </div>
+      </div>
+      <div class="metrics-grid">
+        <div class="m-box">
+          <div class="m-lbl">Principal (FV × Price%)</div>
+          <div class="m-val" id="cumulPrincipal">—</div>
+          <div class="m-sub" id="cumulPrincipalSub">—</div>
+        </div>
+        <div class="m-box gold" id="cumulAccruedBox">
+          <div class="m-lbl">Accrued Interest</div>
+          <div class="m-val gold" id="cumulAccrued">—</div>
+          <div class="m-sub" id="cumulAccruedSub">FV × (1+r/n)^(n×t) − FV</div>
+        </div>
+        <div class="m-box">
+          <div class="m-lbl">Consideration</div>
+          <div class="m-val" id="cumulConsideration">—</div>
+          <div class="m-sub">Principal + Accrued Interest</div>
+        </div>
+        <div class="m-box">
+          <div class="m-lbl">Stamp Duty</div>
+          <div class="m-val" id="cumulStamp">—</div>
+          <div class="m-sub" id="cumulStampSub">—</div>
+        </div>
+        <div class="m-box teal">
+          <div class="m-lbl">Intrinsic Value at VD</div>
+          <div class="m-val teal" id="cumulIntrinsic">—</div>
+          <div class="m-sub" id="cumulIntrinsicSub">FV × (1+r/n)^(n×t) from allotment</div>
+        </div>
+        <div class="m-box">
+          <div class="m-lbl">Discount / Premium to Intrinsic</div>
+          <div class="m-val" id="cumulDiscPrem">—</div>
+          <div class="m-sub" id="cumulDiscPremSub">Consideration vs intrinsic value</div>
+        </div>
+        <div class="m-box green">
+          <div class="m-lbl">Total Gain at Maturity</div>
+          <div class="m-val green" id="cumulTotalGain">—</div>
+          <div class="m-sub" id="cumulTotalGainSub">Maturity value − consideration</div>
+        </div>
+        <div class="m-box">
+          <div class="m-lbl">Holding Period (to Maturity)</div>
+          <div class="m-val" id="cumulHolding">—</div>
+          <div class="m-sub" id="cumulHoldingSub">—</div>
+        </div>
+        <div class="m-box purple">
+          <div class="m-lbl">Compounding Frequency</div>
+          <div class="m-val purple" id="cumulFreqDisplay">—</div>
+          <div class="m-sub" id="cumulFreqSub">—</div>
+        </div>
+        <div class="m-box gold">
+          <div class="m-lbl">Effective Annual Rate</div>
+          <div class="m-val gold" id="cumulEAR">—</div>
+          <div class="m-sub" id="cumulEARSub">EAR = (1+r/n)^n − 1</div>
+        </div>
+        <div class="m-box">
+          <div class="m-lbl">Time from Allotment to VD</div>
+          <div class="m-val" id="cumulTallot">—</div>
+          <div class="m-sub" id="cumulTallotSub">Years elapsed since allotment</div>
+        </div>
+      </div>
+      <div class="formula-note" id="cumulFNote" style="margin-top:12px;"></div>
+    </div>
+
+    <!-- Tax Analysis Card -->
+    <div class="card" id="cumulTaxCard" style="margin-bottom:14px;display:none;">
+      <div class="card-title" style="justify-content:space-between;display:flex;align-items:center;">
+        <span>Tax Analysis</span>
+        <span id="cumulTaxRateBadge" style="font-size:9px;font-family:'JetBrains Mono',monospace;letter-spacing:1px;color:var(--text-dim);"></span>
+      </div>
+
+      <!-- Method toggle -->
+      <div style="display:flex;gap:0;margin-bottom:12px;border-radius:8px;overflow:hidden;border:1px solid var(--border);">
+        <button id="taxTabAccrual" onclick="switchTaxTab('accrual')"
+          style="flex:1;padding:8px;font-family:'Inter',sans-serif;font-size:11px;font-weight:500;
+                 border:none;cursor:pointer;transition:all 0.2s;
+                 background:var(--accent);color:#fff;">
+          📅 Accrual Basis (Sec 145A)
+        </button>
+        <button id="taxTabReceipt" onclick="switchTaxTab('receipt')"
+          style="flex:1;padding:8px;font-family:'Inter',sans-serif;font-size:11px;font-weight:500;
+                 border:none;cursor:pointer;transition:all 0.2s;border-left:1px solid var(--border);
+                 background:var(--surface);color:var(--text-dim);">
+          💰 Receipt Basis (at Maturity)
+        </button>
+      </div>
+
+      <!-- Accrual tab -->
+      <div id="taxPanelAccrual">
+        <div style="font-size:10px;color:var(--text-dim);line-height:1.7;margin-bottom:10px;padding:8px 10px;background:var(--accent-bg);border:1px solid rgba(14,165,233,0.15);border-radius:8px;">
+          Interest compounded each year is taxable at slab rate — even though no cash is received.
+          At maturity, capital gain = Maturity Value − Purchase Price (already fully taxed annually → ₹0 CG tax).
+        </div>
+        <div class="table-wrap">
+          <table>
+            <thead><tr>
+              <th>#</th><th>Period</th>
+              <th class="r">Opening Value</th><th class="r">Closing Value</th>
+              <th class="r">Interest Accrued</th><th class="r">Tax @ Slab</th>
+              <th class="r">Net After Tax</th>
+            </tr></thead>
+            <tbody id="cumulTaxBody"></tbody>
+          </table>
+        </div>
+        <div class="formula-note" id="cumulTaxNote" style="margin-top:10px;"></div>
+      </div>
+
+      <!-- Receipt tab -->
+      <div id="taxPanelReceipt" style="display:none;">
+        <div style="font-size:10px;color:var(--text-dim);line-height:1.7;margin-bottom:10px;padding:8px 10px;background:var(--gold-bg);border:1px solid rgba(245,158,11,0.2);border-radius:8px;">
+          No tax paid during holding period. Entire gain taxed as interest income at slab rate in the year of maturity / receipt.
+          If sold before maturity — STCG (≤12 months, slab rate) or LTCG (&gt;12 months, 12.5% flat).
+        </div>
+        <div class="table-wrap">
+          <table>
+            <thead><tr>
+              <th>Year</th><th>Period</th>
+              <th class="r">Interest Accrued</th><th class="r">Tax Paid</th>
+              <th class="r">Cash Outflow</th><th class="r">Cumulative Gain</th>
+            </tr></thead>
+            <tbody id="cumulTaxBodyReceipt"></tbody>
+          </table>
+        </div>
+        <div class="formula-note" id="cumulTaxNoteReceipt" style="margin-top:10px;"></div>
+      </div>
+    </div>
+
+    <!-- Download buttons -->
+    <div style="display:flex;gap:8px;justify-content:flex-end;margin-bottom:14px;">
+      <button onclick="downloadCumulXIRR()" style="background:var(--accent);color:#fff;border:none;border-radius:3px;padding:7px 14px;font-family:'IBM Plex Mono',monospace;font-size:9px;letter-spacing:1px;text-transform:uppercase;cursor:pointer;">↓ XIRR Template</button>
+    </div>
+  </div>
+
+  <div class="results-panel" id="resultsPanel">
+
+
+    <div class="card sale-panel" id="saleSummaryCard" style="margin-bottom:14px;border:1px solid rgba(29,78,216,0.25);">
+      <div class="card-title" style="color:#1d4ed8;">Early Sale Analysis</div>
+      <div class="metrics-grid" id="saleMetricsGrid">
+        <div class="m-box blue2">
+          <div class="m-lbl">Realised XIRR</div>
+          <div class="m-val blue2" id="saleXIRR">—</div>
+          <div class="m-sub" id="saleXIRRSub">Actual return on holding period</div>
+        </div>
+        <div class="m-box">
+          <div class="m-lbl">Holding Period</div>
+          <div class="m-val" id="saleHolding">—</div>
+          <div class="m-sub" id="saleHoldingSub">—</div>
+        </div>
+        <div class="m-box">
+          <div class="m-lbl">Buy Principal</div>
+          <div class="m-val" id="saleBuyPrincipal">—</div>
+          <div class="m-sub" id="saleBuyPrincipalSub">—</div>
+        </div>
+        <div class="m-box">
+          <div class="m-lbl">Sell Principal</div>
+          <div class="m-val" id="saleSellPrincipal">—</div>
+          <div class="m-sub" id="saleSellPrincipalSub">—</div>
+        </div>
+      </div>
+      <div class="tax-box" id="saleTaxBox">
+        <div class="tax-row" style="font-size:9px;letter-spacing:.6px;color:var(--text-dim);font-weight:700;padding-bottom:5px;">
+          <span>CAPITAL GAIN / LOSS</span><span></span>
+        </div>
+        <div class="tax-row" id="saleRedemRow" style="display:none;">
+          <span class="tax-lbl" style="padding-left:0;">Principal Redemptions received</span>
+          <span class="tax-val neutral" id="saleRedemAmt">—</span>
+        </div>
+        <div class="tax-row">
+          <span class="tax-lbl">Capital Gain / Loss</span>
+          <span class="tax-val" id="saleCapGain">—</span>
+        </div>
+        <div class="tax-row">
+          <span class="tax-lbl">Gain Type</span>
+          <span class="tax-val" id="saleGainType">—</span>
+        </div>
+        <div class="tax-row">
+          <span class="tax-lbl">Applicable Tax Rate</span>
+          <span class="tax-val" id="saleTaxRate">—</span>
+        </div>
+        <div class="tax-row">
+          <span class="tax-lbl">Estimated Tax on Capital Gain</span>
+          <span class="tax-val" id="saleTaxAmt">—</span>
+        </div>
+        <div class="tax-row" style="border-top:1px solid var(--border);margin-top:2px;padding-top:5px;">
+          <span class="tax-lbl">Net Capital Gain (after tax)</span>
+          <span class="tax-val" id="saleNetCapGain">—</span>
+        </div>
+        <div class="tax-row" style="font-size:9px;letter-spacing:.6px;color:var(--text-dim);font-weight:700;padding-top:10px;padding-bottom:5px;border-top:1px solid var(--border);margin-top:6px;">
+          <span>INTEREST INCOME</span><span></span>
+        </div>
+        <div class="tax-row">
+          <span class="tax-lbl">Gross Interest Earned (till sell)</span>
+          <span class="tax-val" id="saleGrossInterest">—</span>
+        </div>
+        <div class="tax-row">
+          <span class="tax-lbl" style="padding-left:12px;">↳ IP Coupons received</span>
+          <span class="tax-val neutral" id="saleCouponIP">—</span>
+        </div>
+        <div class="tax-row">
+          <span class="tax-lbl" style="padding-left:12px;">↳ Accrued interest charged to buyer</span>
+          <span class="tax-val neutral" id="saleAccruedSell">—</span>
+        </div>
+        <div class="tax-row">
+          <span class="tax-lbl">TDS Deducted (10% on interest)</span>
+          <span class="tax-val loss" id="saleTDSAmt">—</span>
+        </div>
+        <div class="tax-row" style="border-top:1px solid var(--border);margin-top:2px;padding-top:5px;">
+          <span class="tax-lbl">Net Interest Received (post-TDS)</span>
+          <span class="tax-val gain" id="saleNetInterest">—</span>
+        </div>
+      </div>
+      <div class="formula-note" id="saleFNote" style="margin-top:10px;"></div>
+      <div style="margin-top:8px;text-align:right;">
+        <button id="saleXIRRBtn" onclick="downloadSaleXIRR()" style="display:none;background:#1d4ed8;color:#fff;border:none;border-radius:3px;padding:5px 12px;font-family:'IBM Plex Mono',monospace;font-size:9px;letter-spacing:1px;text-transform:uppercase;cursor:pointer;">
+          ↓ Realised XIRR Template
+        </button>
+      </div>
+    </div>
+
+    <div class="exdiv-notice" id="exdivNotice">
+      <div class="notice-title" id="noticeTitle"></div>
+      <div id="noticeBody"></div>
+    </div>
+
+    <div class="card">
+      <div class="card-title">Summary</div>
+      <div class="result-hero">
+        <div>
+          <div class="rh-label" id="heroLeftLabel">XIRR (Annualised)</div>
+          <div class="rh-val" id="rXIRR">—</div>
+          <div class="rh-sub" id="heroLeftSub">Acts/365 Newton-Raphson</div>
+        </div>
+        <div>
+          <div class="rh-label">Total Settlement</div>
+          <div class="rh-val" id="rSettle">—</div>
+          <div class="rh-sub" id="rSettleSub">—</div>
+        </div>
+        <div>
+          <div class="rh-label" id="heroRightLabel">Price (% of FV)</div>
+          <div class="rh-val" id="rDerivedPrice">—</div>
+          <div class="rh-sub" id="heroRightSub">—</div>
+          <div class="rh-sub" id="heroRightAlt" style="display:none;margin-top:4px;font-size:11px;color:var(--accent2);font-weight:600;">—</div>
+        </div>
+      </div>
+      <!-- Post-Tax XIRR strip -->
+      <div id="taxXirrStrip" style="display:none;margin-top:10px;border-radius:10px;overflow:hidden;border:1px solid var(--border);">
+        <div style="display:grid;grid-template-columns:1fr 1fr;" id="taxXirrPanels">
+          <div style="padding:12px 14px;background:var(--accent-bg);border-right:1px solid var(--border);">
+            <div style="font-size:9px;font-weight:600;letter-spacing:1px;text-transform:uppercase;color:var(--accent2);margin-bottom:4px;" id="ptxInHandLbl">In-Hand XIRR</div>
+            <div style="font-family:'Space Grotesk',sans-serif;font-size:20px;font-weight:700;color:var(--accent2);" id="ptxInHand">—</div>
+            <div style="font-size:9px;color:var(--text-dim);margin-top:3px;" id="ptxInHandSub">After 10% TDS only</div>
+          </div>
+          <div style="padding:12px 14px;background:var(--green-bg);">
+            <div style="font-size:9px;font-weight:600;letter-spacing:1px;text-transform:uppercase;color:var(--green);margin-bottom:4px;" id="ptxPostTaxLbl">Post-Tax XIRR</div>
+            <div style="font-family:'Space Grotesk',sans-serif;font-size:20px;font-weight:700;color:var(--green);" id="ptxPostTax">—</div>
+            <div style="font-size:9px;color:var(--text-dim);margin-top:3px;" id="ptxPostTaxSub">Full slab on interest</div>
+          </div>
+        </div>
+        <div style="padding:8px 14px;background:var(--surface);border-top:1px solid var(--border);font-size:9px;color:var(--text-dim);font-family:'JetBrains Mono',monospace;" id="ptxNote"></div>
+      </div>
+
+      <div class="metrics-grid">
+        <div class="m-box">
+          <div class="m-lbl">Principal (Dirty)</div>
+          <div class="m-val" id="mPrincipal">—</div>
+          <div class="m-sub" id="mPrincipalSub">—</div>
+        </div>
+        <div class="m-box" id="accruedBox">
+          <div class="m-lbl">Accrued Interest</div>
+          <div class="m-val" id="mAccrued">—</div>
+          <div class="m-sub" id="mAccruedSub">—</div>
+        </div>
+        <div class="m-box">
+          <div class="m-lbl">Consideration</div>
+          <div class="m-val" id="mConsideration">—</div>
+          <div class="m-sub">Principal ± Accrued</div>
+        </div>
+        <div class="m-box">
+          <div class="m-lbl">Stamp Duty</div>
+          <div class="m-val" id="mStamp">—</div>
+          <div class="m-sub" id="mStampSub">—</div>
+        </div>
+        <div class="m-box green">
+          <div class="m-lbl">Interest Receivable (To Maturity)</div>
+          <div class="m-val green" id="mTotalCoupon">—</div>
+          <div class="m-sub" id="mCouponSub">—</div>
+        </div>
+        <div class="m-box" id="mPostTDSCard">
+          <div class="m-lbl">Net Receivable (Post-TDS 10%)</div>
+          <div class="m-val" id="mPostTDS">—</div>
+          <div class="m-sub" id="mPostTDSSub">—</div>
+        </div>
+        <div class="m-box">
+          <div class="m-lbl">Holding Period</div>
+          <div class="m-val" id="mHolding">—</div>
+          <div class="m-sub" id="mHoldingSub">—</div>
+        </div>
+        <div class="m-box">
+          <div class="m-lbl">Current Yield</div>
+          <div class="m-val" id="mCurrentYield">—</div>
+          <div class="m-sub">Annual Coupon ÷ Price</div>
+        </div>
+        <div class="m-box gold" id="derivedPriceBox">
+          <div class="m-lbl" id="derivedPriceLbl">Derived Price (XNPV)</div>
+          <div class="m-val gold" id="mDerivedPrice">—</div>
+          <div class="m-sub" id="mDerivedPriceSub">—</div>
+        </div>
+        <!-- Tax-Free Bond extra boxes -->
+        <div class="m-box green" id="tfbTEYBox" style="display:none;">
+          <div class="m-lbl">Tax-Equivalent Yield</div>
+          <div class="m-val green" id="tfbTEYVal">—</div>
+          <div class="m-sub" id="tfbTEYSub">XIRR ÷ (1 − Slab)</div>
+        </div>
+        <div class="m-box teal" id="tfbSavingBox" style="display:none;">
+          <div class="m-lbl">Annual Tax Saving</div>
+          <div class="m-val teal" id="tfbSavingVal">—</div>
+          <div class="m-sub" id="tfbSavingSub">vs taxable bond at same coupon</div>
+        </div>
+
+        <!-- G-Sec extra boxes — hidden by default -->
+        <div class="m-box teal" id="gsecYTMBox" style="display:none;">
+          <div class="m-lbl" id="gsecYTMLbl">YTM (Semi-Annual Basis)</div>
+          <div class="m-val teal" id="gsecYTMVal">—</div>
+          <div class="m-sub" id="gsecYTMSub">FIMMDA convention</div>
+        </div>
+        <div class="m-box" id="gsecEARBox" style="display:none;">
+          <div class="m-lbl">Effective Annual Rate (EAR)</div>
+          <div class="m-val" id="gsecEARVal">—</div>
+          <div class="m-sub" id="gsecEARSub">(1 + YTM_sa/2)² − 1</div>
+        </div>
+        <div class="m-box purple" id="gsecSpreadBox" style="display:none;">
+          <div class="m-lbl">G-Spread vs Benchmark</div>
+          <div class="m-val purple" id="gsecSpreadVal">—</div>
+          <div class="m-sub" id="gsecSpreadSub">—</div>
+        </div>
+        <div class="m-box red" id="ytcBox" style="display:none;">
+          <div class="m-lbl">XIRR — Yield to Call</div>
+          <div class="m-val red" id="mYTC">—</div>
+          <div class="m-sub" id="mYTCSub">Cash flows truncated at call date</div>
+        </div>
+        <div class="m-box" id="ytcHoldingBox" style="display:none;">
+          <div class="m-lbl">Holding Period (to Call)</div>
+          <div class="m-val" id="mYTCHolding">—</div>
+          <div class="m-sub" id="mYTCHoldingSub">—</div>
+        </div>
+        <div class="m-box blue" id="ytpBox" style="display:none;">
+          <div class="m-lbl">XIRR — Yield to Put</div>
+          <div class="m-val blue" id="mYTP">—</div>
+          <div class="m-sub" id="mYTPSub">Cash flows truncated at put date</div>
+        </div>
+        <div class="m-box" id="ytpHoldingBox" style="display:none;">
+          <div class="m-lbl">Holding Period (to Put)</div>
+          <div class="m-val" id="mYTPHolding">—</div>
+          <div class="m-sub" id="mYTPHoldingSub">—</div>
+        </div>
+        <div class="m-box orange2" id="ytwBox" style="display:none;">
+          <div class="m-lbl">Yield to Worst (YTW)</div>
+          <div class="m-val orange2" id="mYTW">—</div>
+          <div class="m-sub" id="mYTWSub">Minimum of YTM / YTC / YTP</div>
+        </div>
+      </div>
+
+      <div class="formula-note" id="fNote"></div>
+    </div>
+
+    <div class="card" style="margin-top:14px;">
+      <div class="card-title" style="justify-content:space-between;display:flex;align-items:center;">
+        <span style="display:flex;align-items:center;gap:8px;"><span style="display:block;width:3px;height:12px;background:var(--accent3);border-radius:1px;flex-shrink:0;"></span>Cash Flow Schedule</span>
+        <div style="display:flex;gap:6px;align-items:center;">
+          <button onclick="downloadExcel()" style="background:var(--accent);color:#fff;border:none;border-radius:3px;padding:5px 12px;font-family:'IBM Plex Mono',monospace;font-size:9px;letter-spacing:1px;text-transform:uppercase;cursor:pointer;white-space:nowrap;" title="Download Cash Flow Excel">
+            ↓ Cash Flow Excel
+          </button>
+          <button id="xirrTemplateBtn" onclick="downloadXIRR()" style="background:#2e7d32;color:#fff;border:none;border-radius:3px;padding:5px 12px;font-family:'IBM Plex Mono',monospace;font-size:9px;letter-spacing:1px;text-transform:uppercase;cursor:pointer;white-space:nowrap;" title="Download XIRR Template Excel">
+            ↓ XIRR Template
+          </button>
+          <button id="taxReportBtn" onclick="showTaxReportDialog()" style="background:#7c3aed;color:#fff;border:none;border-radius:3px;padding:5px 12px;font-family:'IBM Plex Mono',monospace;font-size:9px;letter-spacing:1px;text-transform:uppercase;cursor:pointer;white-space:nowrap;" title="Download Indian FY Tax Report">
+            ↓ Tax Report
+          </button>
+          <button id="addToPortfolioBtn" onclick="showAddToPortfolioDialog()" style="background:#f59e0b;color:#fff;border:none;border-radius:3px;padding:5px 12px;font-family:'IBM Plex Mono',monospace;font-size:9px;letter-spacing:1px;text-transform:uppercase;cursor:pointer;white-space:nowrap;" title="Add this bond to a client's portfolio">
+            + Add to Portfolio
+          </button>
+        </div>
+      </div>
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th>#</th>
+              <th>Date</th>
+              <th>Type</th>
+              <th class="r">Days</th>
+              <th class="r" id="denomColHeader">Denom</th>
+              <th class="r">O/S Principal (₹)</th>
+              <th class="r">Interest (₹)</th>
+              <th class="r">Principal CF (₹)</th>
+              <th class="r">Cash Flow (₹)</th>
+              <th class="r" id="postTdsColHeader" style="color:#a3c4bc;">Post-TDS CF (₹)</th>
+              <th>Record Date</th>
+              <th>Status</th>
+            </tr>
+          </thead>
+          <tbody id="cfBody"></tbody>
+        </table>
+      </div>
+    </div>
+
+  </div><!-- /results -->
+  </div><!-- /col3-inner -->
+  </div><!-- /col3 -->
+</div><!-- /layout -->
+</div><!-- /page -->
+
+<!-- Paste Dates Modal -->
+<div class="paste-overlay" id="pasteOverlay" onclick="if(event.target===this) closePasteModal()">
+  <div class="paste-modal">
+    <h3>Paste Payment Dates</h3>
+    <p>Paste dates one per line, or comma/semicolon separated.<br>
+    Accepted formats: <strong>DD/MM/YYYY</strong>, <strong>YYYY-MM-DD</strong>, <strong>DD-Mon-YYYY</strong>, <strong>DD Month YYYY</strong></p>
+    <textarea id="pasteTextarea" placeholder="09/08/2025&#10;07/11/2025&#10;09/02/2026&#10;08/05/2026&#10;..." oninput="previewPaste()"></textarea>
+    <div id="pastePreview"></div>
+    <div class="paste-modal-actions">
+      <button class="paste-btn-cancel" onclick="closePasteModal()">Cancel</button>
+      <button class="paste-btn-import" onclick="importPastedDates()">Import Dates</button>
+    </div>
+  </div>
+</div>
+
+<!-- REDEMPTION PASTE MODAL -->
+<div class="paste-overlay" id="pasteRedemOverlay" onclick="if(event.target===this) closeRedemPasteModal()">
+  <div class="paste-modal" style="max-width:500px;">
+    <h3>Import Redemption Schedule</h3>
+    <p>Paste one row per line: <strong>Date</strong>, <strong>% of FV</strong> [, Note]<br>
+    Formats: DD/MM/YYYY, YYYY-MM-DD, DD-Mon-YYYY</p>
+    <textarea id="pasteRedemTextarea" rows="10"
+      placeholder="24/Mar/2025, 2.5, Issuer discretion&#10;24/Jun/2025, 2.5"
+      oninput="previewRedemPaste()" style="font-size:11px;"></textarea>
+    <div id="pasteRedemPreview" style="font-size:10px;color:var(--accent2);margin-top:6px;min-height:16px;"></div>
+    <div class="paste-modal-actions">
+      <button class="paste-btn-cancel" onclick="closeRedemPasteModal()">Cancel</button>
+      <button class="paste-btn-import" onclick="importRedemPaste()">Import</button>
+    </div>
+  </div>
+</div>
+
+<!-- Local Bond Database -->
+<script src="bonds_database.js"></script>
+
+<script src="app.js"></script>
+
+<!--
+  XLSX export library: using `xlsx-js-style` instead of plain SheetJS Community,
+  because the standard SheetJS does not render cell styles (font color, fills,
+  borders, alignment, number formats with color) in writeFile output.
+  xlsx-js-style is a drop-in replacement with the same API surface that
+  preserves the styles set in cell.s. All existing XLSX.* calls work unchanged.
+  Reference: https://github.com/gitbrent/xlsx-js-style
+-->
+<script src="https://cdn.jsdelivr.net/npm/xlsx-js-style@1.2.0/dist/xlsx.bundle.js"></script>
+<script>
+// ─── TAX REPORT ─────────────────────────────────────────────────────────────
+
+function showTaxReportDialog() {
+  if (!window._lastCalcMeta || !window._lastCalcRows) {
+    alert('Please calculate the bond first before generating a tax report.');
+    return;
+  }
+  const overlay = document.getElementById('taxReportOverlay');
+  overlay.style.display = 'flex';
+
+  // Pre-fill purchase accrued from current calculation if available
+  const m = window._lastCalcMeta;
+  // Pre-fill with value date as a hint
+  const vd = m.valueDate;
+  if (vd) {
+    const vdStr = vd instanceof Date
+      ? vd.getFullYear()+'-'+String(vd.getMonth()+1).padStart(2,'0')+'-'+String(vd.getDate()).padStart(2,'0')
+      : vd;
+    document.getElementById('taxPurchaseDate').value = vdStr;
+  }
+  // Pre-fill accrued paid (cum-div: positive accrued paid; ex-div: negative = credited back)
+  if (m.accruedInt !== undefined) {
+    const accrPaid = m.isExDiv ? 0 : Math.abs(m.accruedInt);
+    document.getElementById('taxPurchaseAccrued').value = accrPaid.toFixed(2);
+  }
+  // Pre-fill purchase price from current calc
+  if (m.pricePct) document.getElementById('taxPurchasePrice').value = m.pricePct.toFixed(4);
+}
+
+function closeTaxDialog() {
+  document.getElementById('taxReportOverlay').style.display = 'none';
+}
+
+function toggleTaxSaleFields() {
+  const sold = document.getElementById('taxSoldInFY').checked;
+  const sf = document.getElementById('taxSaleFields');
+  sf.style.display = sold ? 'block' : 'none';
+  // If being enabled and a sale date is already present, auto-compute accrued
+  if (sold) computeSaleAccruedAuto();
+}
+
+// ── Auto-compute accrued interest received at sale ─────────────────────────
+// Mirrors the main calc's purchase-side accrued logic, but anchored on sale date:
+// • CUM-DIV sale (sale ≤ record date):  accrued = O/S × coupon × (lastIP → saleDate) / denom  → positive
+// • EX-DIV  sale (sale >  record date):  accrued = O/S × coupon × (saleDate → nextIP) / denom → negative
+//   (seller keeps the upcoming coupon → buyer is credited)
+// Uses the same couponInterest() helper → respects ACT/ACT, 30/360, 30E/360, G-Sec conventions.
+// Field remains editable: user can override.
+function computeSaleAccruedAuto() {
+  const saleDateStr = document.getElementById('taxSaleDate').value;
+  if (!saleDateStr) return;
+
+  const m    = window._lastCalcMeta;
+  const rows = window._lastCalcRows || [];
+  if (!m || !rows.length) return;
+
+  const accrField = document.getElementById('taxSaleAccrued');
+  if (!accrField) return;
+
+  // ZCB has no coupon accrual — force zero
+  if (_bondMode === 'zcb' || !m.couponPct) {
+    accrField.value = '0.00';
+    return;
+  }
+
+  const saleDate = parseLocalDate(saleDateStr);
+  if (!saleDate || isNaN(saleDate.getTime())) return;
+
+  // Sanity: sale must be strictly after value date (you can't sell before you bought)
+  if (m.valueDate && saleDate <= m.valueDate) return;  // leave field alone
+  // Sanity: on/after maturity — bond has already redeemed, no accrued
+  if (m.matDate && saleDate >= m.matDate) { accrField.value = '0.00'; return; }
+
+  // Find next IP row strictly after saleDate → gives us outstanding base & next IP date & record date
+  const nextRow = rows.find(r => r.date instanceof Date && r.date > saleDate);
+  if (!nextRow) { accrField.value = '0.00'; return; }
+
+  const nextIP            = nextRow.date;
+  const outstandingForSale = nextRow.outstandingBefore || m.outstandingForAccrued || 0;
+  if (outstandingForSale <= 0) { accrField.value = '0.00'; return; }
+
+  // Previous IP ≤ saleDate — used as cum-div accrual start
+  const ipDates = (window._lastIpDates || [])
+                    .map(d => d instanceof Date ? d : parseLocalDate(d))
+                    .filter(d => d && !isNaN(d.getTime()));
+  let prevIP = ipDates.filter(d => d <= saleDate).sort((a,b) => b-a)[0];
+  if (!prevIP) prevIP = m.effectiveLastIPDate || m.lastIPDate;
+  if (!prevIP) return;
+
+  // Ex-div check: if saleDate > nextIP's record date → ex-div trade
+  const nextRD      = nextRow.rd || (typeof getEffectiveRD === 'function' ? getEffectiveRD(nextIP) : null);
+  const isExDivSale = !!(nextRD && saleDate > nextRD);
+
+  // Same pattern as main calc (line ~5164):
+  //   cum-div: accrualFromDate = prevIP   , toDate = saleDate   → positive days
+  //   ex-div : accrualFromDate = nextIP   , toDate = saleDate   → negative days (saleDate < nextIP)
+  // NOTE: m.couponPct is stored in PERCENT form (e.g. 10.15), couponInterest expects decimal → divide by 100
+  const accrualFromDate = isExDivSale ? nextIP : prevIP;
+  const couponDec = (m.couponPct || 0) / 100;
+  const dc = couponInterest(outstandingForSale, couponDec, accrualFromDate, saleDate, m.dcConv);
+  const accrued = dc.interest;
+
+  accrField.value = accrued.toFixed(2);
+}
+
+function downloadTaxReport() {
+  const m   = window._lastCalcMeta;
+  const rows = window._lastCalcRows || [];
+  if (!m) { alert('No calculation data. Please calculate first.'); return; }
+
+  // ── Read dialog inputs ───────────────────────────────────────────────────
+  const purchaseDateStr  = document.getElementById('taxPurchaseDate').value;
+  const purchasePricePct = parseFloat(document.getElementById('taxPurchasePrice').value);
+  const purchaseAccrued  = parseFloat(document.getElementById('taxPurchaseAccrued').value) || 0;
+  const fyStr            = document.getElementById('taxFY').value;
+  const taxSlab          = parseFloat(document.getElementById('taxSlab').value);
+  const soldInFY         = document.getElementById('taxSoldInFY').checked;
+  const saleDateStr      = soldInFY ? document.getElementById('taxSaleDate').value : '';
+  const salePricePct     = soldInFY ? (parseFloat(document.getElementById('taxSalePrice').value) || 0) : 0;
+  const saleAccrued      = soldInFY ? (parseFloat(document.getElementById('taxSaleAccrued').value) || 0) : 0;
+
+  if (!purchaseDateStr) { alert('Please enter purchase date.'); return; }
+  if (isNaN(purchasePricePct)) { alert('Please enter purchase price.'); return; }
+
+  // ── FY date range ────────────────────────────────────────────────────────
+  const fyStart = parseInt(fyStr.split('-')[0]);
+  const fyStartDate = new Date(fyStart, 3, 1);    // Apr 1
+  const fyEndDate   = new Date(fyStart + 1, 2, 31); // Mar 31
+
+  const purchaseDate = parseLocalDate(purchaseDateStr);
+  const saleDate     = soldInFY && saleDateStr ? parseLocalDate(saleDateStr) : null;
+
+  // ── Bond basics ─────────────────────────────────────────────────────────
+  const bondName  = m.secName || m.isin || 'Bond';
+  const isin      = m.isin || '—';
+  const fvTotal   = m.fvTotal || 100000;
+  const fvPerBond = m.fvPerBond || 100000;
+  const qty       = m.qty || 1;
+  const coupon    = (m.couponPct || 0) / 100;   // m.couponPct is in percent form (e.g. 10.15) — convert to decimal
+  const isTFB     = (document.getElementById('dayCount') && false) || (m.dcConv === 'taxfree') || (_bondMode === 'taxfree');
+  const isZCB     = _bondMode === 'zcb';
+  const isGsec    = _bondMode === 'gsec';
+  const matDate   = m.matDate;
+
+  // ── Cost of acquisition ──────────────────────────────────────────────────
+  // Cost = dirty price at purchase = (purchasePricePct/100 × fvTotal) + accrued paid
+  const purchasePrincipal  = (purchasePricePct / 100) * fvTotal;
+  // For ITR Schedule CG: Cost of Acquisition = principal + stamp duty
+  // Accrued interest paid at purchase is NOT part of CoA (it's adjusted under Sec 145A for interest income)
+  const stampAtPurchase    = Math.round(purchasePrincipal * (m.stampPct || 0.0001));
+  const costOfAcquisition  = purchasePrincipal + stampAtPurchase;  // CoA for Schedule CG
+  const totalCost          = costOfAcquisition + purchaseAccrued;  // Total cash outflow
+
+  // ── Filter cash flows in FY ──────────────────────────────────────────────
+  // Rows that fall within this FY, buyer receives (not buyerMisses), after purchase date
+  const fyRows = rows.filter(r => {
+    if (r.buyerMisses) return false;
+    if (!(r.date instanceof Date)) return false;
+    if (r.date <= purchaseDate) return false;       // before or on purchase
+    if (r.date < fyStartDate || r.date > fyEndDate) return false; // outside FY
+    if (saleDate && r.date > saleDate) return false; // after sale date
+    return true;
+  });
+
+  // ── Section 145A accrual logic ────────────────────────────────────────────
+  // Find the last IP date on or before purchaseDate (= accrual start at buy)
+  // Find accrual from Apr 1 (FY start) to next IP → opening accrual
+  // Find accrual from last IP to Mar 31 (FY end) → closing accrual
+
+  // Determine opening accrual (Apr 1 accrual from previous period)
+  // If purchase was before this FY, find the last IP before Apr 1
+  // Accrual = outstanding × coupon × days(lastIP→Apr1) / denom
+  let openingAccrual = 0;
+  let closingAccrual = 0;
+
+  if (!isZCB) {
+    // Last IP on or before Apr 1 of this FY
+    const ipDatesAll = (window._lastIpDates || []).map(d => d instanceof Date ? d : parseLocalDate(d));
+
+    // Opening accrual: last IP before FY start to FY start (Apr 1)
+    // (only if bond was held at FY start = purchased before Apr 1)
+    if (purchaseDate < fyStartDate) {
+      // Opening accrual = accrued from last IP date (before Apr 1) up to Apr 1
+      // This was taxable in prior FY and should be deducted from this FY's income
+      const lastIPBeforeFYStart = ipDatesAll.filter(d => d < fyStartDate && d >= purchaseDate)
+                                             .sort((a,b) => b-a)[0];
+      if (lastIPBeforeFYStart) {
+        const days = Math.round((fyStartDate - lastIPBeforeFYStart) / 86400000);
+        openingAccrual = Math.round(m.outstandingAtValueDate * coupon * days / 365 * 100) / 100;
+      }
+    }
+
+    // Closing accrual: interest accrued but not received as at 31-Mar
+    // Only relevant if bond is still held at 31-Mar (not sold in FY)
+    const stillHeldAtFYEnd = !saleDate || saleDate > fyEndDate;
+    if (stillHeldAtFYEnd) {
+      // Find the last IP date before Mar 31 and after the purchase date
+      const lastIPBeforeMar31 = ipDatesAll
+        .filter(d => d < fyEndDate && d >= purchaseDate)
+        .sort((a,b) => b-a)[0];
+      if (lastIPBeforeMar31) {
+        const days = Math.round((fyEndDate - lastIPBeforeMar31) / 86400000);
+        closingAccrual = Math.round(m.outstandingAtValueDate * coupon * days / 365 * 100) / 100;
+      }
+    }
+  }
+
+  // ── Coupons received in FY ───────────────────────────────────────────────
+  const couponsInFY = fyRows.filter(r => !r.isMat || r.interest > 0);
+  const totalCouponReceived = couponsInFY.reduce((s, r) => s + (r.interest || 0), 0);
+  const totalTDSDeducted    = Math.round(totalCouponReceived * 0.1 * 100) / 100;
+
+  // ── Net taxable interest (Section 145A) ─────────────────────────────────
+  // = Coupons received + closing accrual − opening accrual − accrued paid at purchase (if purchased this FY)
+  const accrualPaidThisFY = purchaseDate >= fyStartDate ? purchaseAccrued : 0;
+  const accrualReceivedThisFY = saleDate && saleDate >= fyStartDate ? saleAccrued : 0;
+  const netTaxableInterest = totalCouponReceived + closingAccrual - openingAccrual
+                           - accrualPaidThisFY + accrualReceivedThisFY;
+
+  // ── Capital gains (only if sold in FY) ──────────────────────────────────
+  let cgSection = null;
+  if (soldInFY && saleDate) {
+    const holdingDays   = Math.round((saleDate - purchaseDate) / 86400000);
+    const holdingMonths = holdingDays / 30.44;
+    // Listed bonds (NCDs, G-Secs, tax-free bonds): LTCG if held > 12 months
+    // (Finance Act 2024 — post Jul 23, 2024: listed bonds LTCG @ 12.5%, STCG @ slab)
+    const isLTCG        = holdingDays > 365; // > 12 months
+
+    // Sale proceeds = (salePrice/100 × osAtSale × fvTotal / osAtPurchase) + saleAccrued
+    // Simplified: salePrice% × fvTotal + saleAccrued
+    const salePrincipal   = (salePricePct / 100) * fvTotal;
+    // For CG: sale proceeds = sale principal only (accrued received is taxed as interest, not CG)
+    const saleProceeds    = salePrincipal;
+    const capitalGain     = saleProceeds - costOfAcquisition;
+    const cgTaxRate       = isLTCG ? 0.125 : taxSlab;
+    const taxOnCG         = Math.max(0, capitalGain) * cgTaxRate;
+
+    cgSection = {
+      holdingDays, holdingMonths, isLTCG,
+      purchasePrincipal, purchaseAccrued, costOfAcquisition, stampAtPurchase,
+      salePrincipal, saleAccrued, saleProceeds,
+      capitalGain, cgTaxRate, taxOnCG
+    };
+  }
+
+  // ── Tax liability estimate ───────────────────────────────────────────────
+  const interestTax = Math.max(0, netTaxableInterest) * taxSlab;
+  const cgTax       = cgSection ? cgSection.taxOnCG : 0;
+  const totalTax    = interestTax + cgTax;
+  const netTaxAfterTDS = Math.max(0, totalTax - totalTDSDeducted);
+
+  // ── Build XLSX ───────────────────────────────────────────────────────────
+  const wb = XLSX.utils.book_new();
+
+  // ── Helper: styled cell builder ──────────────────────────────────────────
+  function sCell(ws, r, c, val, opts={}) {
+    const addr = XLSX.utils.encode_cell({r, c});
+    // Handle undefined/null val gracefully
+    const safeVal = (val === undefined || val === null) ? '' : val;
+    ws[addr] = { v: safeVal, t: typeof safeVal === 'number' ? 'n' : 's' };
+    if (opts.fmt) ws[addr].z = opts.fmt;  // numFmt goes on z, not inside .s
+    if (opts.bold || opts.fill || opts.color || opts.align || opts.sz) {
+      ws[addr].s = {};
+      ws[addr].s.font = { bold: !!opts.bold, name: 'Calibri', sz: opts.sz || 11 };
+      if (opts.color) ws[addr].s.font.color = { rgb: opts.color };
+      if (opts.fill)  ws[addr].s.fill = { fgColor: { rgb: opts.fill }, patternType: 'solid' };
+      if (opts.align) ws[addr].s.alignment = { horizontal: opts.align, wrapText: true };
+    }
+    return ws[addr];
+  }
+
+  const DARK   = '1B2A4A';
+  const PURPLE = '6D28D9';
+  const BLUE   = '0284C7';
+  const GREEN  = '065F46';
+  const AMBER  = '92400E';
+  const RED    = '991B1B';
+  const LGRAY  = 'F1F5F9';
+  const MBLUE  = 'DBEAFE';
+  const MGREEN = 'D1FAE5';
+  const MAMBER = 'FEF3C7';
+  const MRED   = 'FEE2E2';
+  const MPURP  = 'EDE9FE';
+  const WHITE  = 'FFFFFF';
+
+  // ═══════════════════════════════════════════════════════════════════════
+  // SHEET 1: TAX SUMMARY
+  // ═══════════════════════════════════════════════════════════════════════
+  const ws = {};
+
+  let row = 0;
+
+  // Title block
+  sCell(ws,row,0,'DEBTLENS — BOND TAX REPORT',{bold:true,fill:DARK,color:'60A5FA',sz:14,align:'left'});
+  sCell(ws,row,1,'',{fill:DARK}); sCell(ws,row,2,'',{fill:DARK}); sCell(ws,row,3,'',{fill:DARK});
+  ws['!merges'] = ws['!merges'] || [];
+  ws['!merges'].push({s:{r:row,c:0},e:{r:row,c:3}});
+  row++;
+
+  sCell(ws,row,0,`Financial Year: ${fyStr.replace('-','–')}  |  Generated: ${new Date().toLocaleDateString('en-IN')}`,{fill:DARK,color:'94A3B8',sz:10});
+  sCell(ws,row,1,'',{fill:DARK}); sCell(ws,row,2,'',{fill:DARK}); sCell(ws,row,3,'',{fill:DARK});
+  ws['!merges'].push({s:{r:row,c:0},e:{r:row,c:3}});
+  row++;
+
+  // Bond identity
+  row++;
+  sCell(ws,row,0,'BOND IDENTITY',{bold:true,fill:PURPLE,color:WHITE,sz:10});
+  sCell(ws,row,1,'',{fill:PURPLE}); sCell(ws,row,2,'',{fill:PURPLE}); sCell(ws,row,3,'',{fill:PURPLE});
+  ws['!merges'].push({s:{r:row,c:0},e:{r:row,c:3}});
+  row++;
+
+  const idRows = [
+    ['Bond Name', bondName], ['ISIN', isin],
+    ['Face Value (per bond)', fvPerBond], ['Quantity', qty],
+    ['Total Face Value', fvTotal], ['Coupon Rate', coupon * 100 + '%'],
+    ['Bond Type', isZCB?'Zero Coupon':isTFB?'Tax-Free':isGsec?'G-Sec':m.bondType||'NCD'],
+    ['Maturity Date', matDate ? fmtDate(matDate) : '—'],
+  ];
+  idRows.forEach(([k,v]) => {
+    sCell(ws,row,0,k,{fill:LGRAY,sz:10});
+    sCell(ws,row,1,typeof v==='number'?v:String(v),{bold:true,sz:10,align:typeof v==='number'?'right':'left',fmt:typeof v==='number'?'#,##0.00':undefined});
+    sCell(ws,row,2,'',{}); sCell(ws,row,3,'',{});
+    row++;
+  });
+
+  // Purchase details
+  row++;
+  sCell(ws,row,0,'PURCHASE DETAILS',{bold:true,fill:BLUE,color:WHITE,sz:10});
+  sCell(ws,row,1,'',{fill:BLUE}); sCell(ws,row,2,'',{fill:BLUE}); sCell(ws,row,3,'',{fill:BLUE});
+  ws['!merges'].push({s:{r:row,c:0},e:{r:row,c:3}});
+  row++;
+
+  const buyRows = [
+    ['Purchase Date', fmtDate(purchaseDate)],
+    ['Purchase Price (% of FV)', purchasePricePct, '#,##0.0000'],
+    ['Purchase Principal — dirty price (₹)', purchasePrincipal, '#,##0.00'],
+    ['Stamp Duty at Purchase (₹)', stampAtPurchase, '#,##0.00'],
+    ['Cost of Acquisition for CG (₹)', costOfAcquisition, '#,##0.00'],
+    ['Accrued Interest Paid at Purchase (₹)', purchaseAccrued, '#,##0.00'],
+    ['Total Cash Outflow at Settlement (₹)', totalCost, '#,##0.00'],
+  ];
+  buyRows.forEach(([k,v,fmt]) => {
+    sCell(ws,row,0,k,{fill:MBLUE,sz:10});
+    sCell(ws,row,1,typeof v==='number'?v:String(v),{bold:typeof v==='number',sz:10,align:typeof v==='number'?'right':'left',fmt});
+    sCell(ws,row,2,'',{}); sCell(ws,row,3,'',{});
+    row++;
+  });
+
+  // ── Schedule OS: Interest Income ─────────────────────────────────────────
+  row++;
+  sCell(ws,row,0,'SCHEDULE OS — INTEREST INCOME (Section 56 + 145A)',{bold:true,fill:GREEN,color:WHITE,sz:10});
+  sCell(ws,row,1,'',{fill:GREEN}); sCell(ws,row,2,'',{fill:GREEN}); sCell(ws,row,3,'',{fill:GREEN});
+  ws['!merges'].push({s:{r:row,c:0},e:{r:row,c:3}});
+  row++;
+
+  // Coupon breakdown — drop TDS column for non-TDS bonds.
+  const _showTDS_TR = _currentBondHasTDS();
+  sCell(ws,row,0,'Date',{bold:true,fill:MGREEN,sz:10});
+  sCell(ws,row,1,'Gross Coupon (₹)',{bold:true,fill:MGREEN,sz:10,align:'right'});
+  if (_showTDS_TR) {
+    sCell(ws,row,2,'TDS @ 10% (₹)',{bold:true,fill:MGREEN,sz:10,align:'right'});
+    sCell(ws,row,3,'Net Received (₹)',{bold:true,fill:MGREEN,sz:10,align:'right'});
+  } else {
+    sCell(ws,row,2,'Net Received (₹)',{bold:true,fill:MGREEN,sz:10,align:'right'});
+    sCell(ws,row,3,'',{fill:MGREEN});
+  }
+  row++;
+
+  let couponTotal=0, tdsTotal=0, netTotal=0;
+  couponsInFY.forEach(r => {
+    const gross = r.interest || 0;
+    const tds   = _showTDS_TR ? Math.round(gross * 0.1 * 100)/100 : 0;
+    const net   = gross - tds;
+    couponTotal += gross; tdsTotal += tds; netTotal += net;
+    sCell(ws,row,0,fmtDate(r.date),{sz:10});
+    sCell(ws,row,1,gross,{sz:10,align:'right',fmt:'#,##0.00'});
+    if (_showTDS_TR) {
+      sCell(ws,row,2,tds,{sz:10,align:'right',fmt:'#,##0.00'});
+      sCell(ws,row,3,net,{sz:10,align:'right',fmt:'#,##0.00'});
+    } else {
+      sCell(ws,row,2,net,{sz:10,align:'right',fmt:'#,##0.00'});
+      sCell(ws,row,3,'',{});
+    }
+    row++;
+  });
+  if (couponsInFY.length === 0) {
+    sCell(ws,row,0,'No coupons received in this FY',{sz:10,color:'94A3B8'});
+    row++;
+  }
+
+  sCell(ws,row,0,'Total Coupons Received',{bold:true,fill:LGRAY,sz:10});
+  sCell(ws,row,1,couponTotal,{bold:true,fill:LGRAY,sz:10,align:'right',fmt:'#,##0.00'});
+  if (_showTDS_TR) {
+    sCell(ws,row,2,tdsTotal,{bold:true,fill:LGRAY,sz:10,align:'right',fmt:'#,##0.00'});
+    sCell(ws,row,3,netTotal,{bold:true,fill:LGRAY,sz:10,align:'right',fmt:'#,##0.00'});
+  } else {
+    sCell(ws,row,2,netTotal,{bold:true,fill:LGRAY,sz:10,align:'right',fmt:'#,##0.00'});
+    sCell(ws,row,3,'',{fill:LGRAY});
+  }
+  row++;
+
+  // Section 145A adjustments
+  row++;
+  sCell(ws,row,0,'SECTION 145A ADJUSTMENTS (Accrual Basis)',{bold:true,fill:AMBER,color:WHITE,sz:10});
+  sCell(ws,row,1,'',{fill:AMBER}); sCell(ws,row,2,'',{fill:AMBER}); sCell(ws,row,3,'',{fill:AMBER});
+  ws['!merges'].push({s:{r:row,c:0},e:{r:row,c:3}});
+  row++;
+
+  const adjRows = [
+    ['(A) Gross coupon received in FY', couponTotal,'Coupons actually received'],
+    ['(B) Closing accrual — interest accrued but not received as at 31-Mar', closingAccrual,'Taxable in this FY even if not yet received (Sec 145A)'],
+    ['(C) Opening accrual — interest accrued declared in last FY', openingAccrual,'Deduct: already taxed in prior FY'],
+    ['(D) Accrued interest PAID at purchase (this FY)', accrualPaidThisFY,'Deduct: paid to seller, not your income'],
+    ['(E) Accrued interest RECEIVED at sale (this FY)', accrualReceivedThisFY,'Add: received from buyer, taxable as interest'],
+    ['NET TAXABLE INTEREST = A + B − C − D + E', netTaxableInterest,'Declare this in Schedule OS of ITR'],
+  ];
+  adjRows.forEach(([k,v,note]) => {
+    const isNet = k.startsWith('NET');
+    sCell(ws,row,0,k,{bold:isNet,fill:isNet?MAMBER:LGRAY,sz:10,color:isNet?AMBER:undefined});
+    sCell(ws,row,1,v,{bold:isNet,fill:isNet?MAMBER:undefined,sz:10,align:'right',fmt:'#,##0.00'});
+    sCell(ws,row,2,note,{sz:9,color:'64748B'});
+    sCell(ws,row,3,'',{});
+    row++;
+  });
+
+  // TDS credit
+  row++;
+  sCell(ws,row,0,'TDS CREDIT (Form 26AS)',{bold:true,fill:BLUE,color:WHITE,sz:10});
+  sCell(ws,row,1,'',{fill:BLUE}); sCell(ws,row,2,'',{fill:BLUE}); sCell(ws,row,3,'',{fill:BLUE});
+  ws['!merges'].push({s:{r:row,c:0},e:{r:row,c:3}});
+  row++;
+
+  const tdsRows = [
+    ['TDS deducted by issuer (10% of gross coupons)', totalTDSDeducted,'Verify against Form 26AS / AIS'],
+    ['TDS credit claimable in ITR', totalTDSDeducted,'Enter in Schedule TDS of ITR'],
+  ];
+  tdsRows.forEach(([k,v,note]) => {
+    sCell(ws,row,0,k,{fill:MBLUE,sz:10});
+    sCell(ws,row,1,v,{bold:true,sz:10,align:'right',fmt:'#,##0.00'});
+    sCell(ws,row,2,note,{sz:9,color:'64748B'});
+    sCell(ws,row,3,'',{});
+    row++;
+  });
+
+  // Capital gains
+  if (cgSection) {
+    row++;
+    sCell(ws,row,0,'SCHEDULE CG — CAPITAL GAINS',{bold:true,fill:cgSection.isLTCG?GREEN:RED,color:WHITE,sz:10});
+    sCell(ws,row,1,'',{fill:cgSection.isLTCG?GREEN:RED});
+    sCell(ws,row,2,'',{fill:cgSection.isLTCG?GREEN:RED});
+    sCell(ws,row,3,'',{fill:cgSection.isLTCG?GREEN:RED});
+    ws['!merges'].push({s:{r:row,c:0},e:{r:row,c:3}});
+    row++;
+
+    const cgRows = [
+      ['Holding period', `${cgSection.holdingDays} days (${cgSection.holdingMonths.toFixed(1)} months)`,undefined,cgSection.isLTCG?'LONG-TERM (>12 months)':'SHORT-TERM (≤12 months)'],
+      ['Classification', cgSection.isLTCG?'LTCG — Tax @ 12.5% (no indexation, Finance Act 2024)':'STCG — Tax @ slab rate'],
+      ['Full sale consideration for CG (₹)', cgSection.saleProceeds, '#,##0.00'],
+      ['  Sale principal (₹)', cgSection.salePrincipal, '#,##0.00'],
+      ['  Accrued received at sale (taxed as interest, not CG) (₹)', cgSection.saleAccrued, '#,##0.00'],
+      ['Cost of acquisition for CG (₹)', cgSection.costOfAcquisition, '#,##0.00'],
+      ['  Purchase principal (₹)', cgSection.purchasePrincipal, '#,##0.00'],
+      ['  Stamp duty at purchase (₹)', cgSection.stampAtPurchase, '#,##0.00'],
+      ['Capital Gain / (Loss) (₹)',   cgSection.capitalGain,         '#,##0.00'],
+      ['Tax on Capital Gain (₹)',     cgSection.taxOnCG,             '#,##0.00'],
+    ];
+    cgRows.forEach(([k,v,fmt,note]) => {
+      const isTotal = k.startsWith('Capital Gain') || k.startsWith('Tax on');
+      const isSub = k.startsWith('  ');
+      sCell(ws,row,0,k,{bold:isTotal,fill:isTotal?(cgSection.capitalGain>=0?MGREEN:MRED):LGRAY,sz:10,color:isSub?'64748B':undefined});
+      sCell(ws,row,1,typeof v==='number'?v:String(v),{bold:isTotal,sz:10,align:typeof v==='number'?'right':'left',fmt});
+      if(note) sCell(ws,row,2,note,{bold:true,sz:10,color:cgSection.isLTCG?GREEN:RED});
+      else { sCell(ws,row,2,'',{sz:10}); }
+      sCell(ws,row,3,'',{});
+      row++;
+    });
+  }
+
+  // Final summary
+  row++;
+  sCell(ws,row,0,'TAX LIABILITY SUMMARY',{bold:true,fill:PURPLE,color:WHITE,sz:11});
+  sCell(ws,row,1,'',{fill:PURPLE}); sCell(ws,row,2,'',{fill:PURPLE}); sCell(ws,row,3,'',{fill:PURPLE});
+  ws['!merges'].push({s:{r:row,c:0},e:{r:row,c:3}});
+  row++;
+
+  const summaryRows = [
+    ['Net taxable interest income (₹)', netTaxableInterest, '#,##0.00'],
+    [`Tax on interest @ ${(taxSlab*100).toFixed(0)}% (₹)`, interestTax, '#,##0.00'],
+    cgSection ? [`Capital ${cgSection.capitalGain>=0?'Gain':'Loss'} (₹)`, cgSection.capitalGain, '#,##0.00'] : null,
+    cgSection ? [`Tax on CG @ ${(cgSection.cgTaxRate*100).toFixed(1)}% (₹)`, cgSection.taxOnCG, '#,##0.00'] : null,
+    ['Total estimated tax (₹)', totalTax, '#,##0.00'],
+    ['Less: TDS credit (₹)', totalTDSDeducted, '#,##0.00'],
+    ['Net tax payable at ITR filing (₹)', netTaxAfterTDS, '#,##0.00'],
+  ].filter(Boolean);
+
+  summaryRows.forEach(([k,v,fmt]) => {
+    const isNet = k.startsWith('Net tax payable');
+    sCell(ws,row,0,k,{bold:isNet,fill:isNet?MPURP:LGRAY,sz:isNet?12:11,color:isNet?PURPLE:undefined});
+    sCell(ws,row,1,v,{bold:isNet,sz:isNet?12:11,align:'right',fmt,color:isNet&&v>0?RED:isNet?GREEN:undefined});
+    sCell(ws,row,2,'',{}); sCell(ws,row,3,'',{});
+    row++;
+  });
+
+  // Disclaimer
+  row++;
+  sCell(ws,row,0,'⚠ This report is indicative. Consult your CA/tax advisor for final ITR filing. Numbers subject to actual Form 26AS reconciliation.',{sz:9,color:'94A3B8'});
+  ws['!merges'].push({s:{r:row,c:0},e:{r:row,c:3}});
+
+  // Sheet dimensions
+  ws['!ref'] = XLSX.utils.encode_range({s:{r:0,c:0},e:{r:row,c:3}});
+  ws['!cols'] = [{wch:52},{wch:20},{wch:48},{wch:20}];
+  ws['!rows'] = Array.from({length:row+1},()=>({hpt:18}));
+  ws['!rows'][0] = {hpt:28};
+
+  XLSX.utils.book_append_sheet(wb, ws, 'Tax Summary');
+
+  // ═══════════════════════════════════════════════════════════════════════
+  // SHEET 2: COUPON DETAIL (each coupon row with FY attribution)
+  // ═══════════════════════════════════════════════════════════════════════
+  const ws2 = {};
+  // Drop TDS column for non-TDS bonds. Coupon column becomes "Coupon Received" (gross = net).
+  const _showTDSCol2 = _currentBondHasTDS();
+  const hdr2 = _showTDSCol2
+    ? ['#','Date','Type','O/S Principal (₹)','Days','Denom','Gross Interest (₹)','TDS @ 10% (₹)','Net Received (₹)','Post-TDS @ Slab (₹)','Principal Returned (₹)','In This FY?','Note']
+    : ['#','Date','Type','O/S Principal (₹)','Days','Denom','Coupon Received (₹)','Post-Tax @ Slab (₹)','Principal Returned (₹)','In This FY?','Note'];
+  hdr2.forEach((h,ci) => sCell(ws2,0,ci,h,{bold:true,fill:DARK,color:WHITE,sz:10,align:ci>2?'right':'left'}));
+
+  let r2 = 1;
+  rows.forEach((r, ri) => {
+    if (r.buyerMisses) return;
+    const inFY   = r.date >= fyStartDate && r.date <= fyEndDate;
+    const gross  = r.interest || 0;
+    const tds10  = _showTDSCol2 ? Math.round(gross*0.1*100)/100 : 0;
+    const net    = gross - tds10;
+    // For tax-free bonds, slab tax = 0 (Sec 10(15) exempt). For G-Sec, slab applies. For taxable, slab applies on net of TDS.
+    const isTaxFree = (typeof _bondMode === 'string' && _bondMode === 'taxfree');
+    const slabTx = isTaxFree ? 0 : Math.round(Math.max(0, gross - tds10) * taxSlab * 100) / 100;
+    const bg     = inFY ? MGREEN : '';
+    sCell(ws2,r2,0,ri,{sz:10,fill:bg});
+    sCell(ws2,r2,1,fmtDate(r.date),{sz:10,fill:bg});
+    sCell(ws2,r2,2,r.isMat?'Maturity':'Coupon',{sz:10,fill:bg});
+    sCell(ws2,r2,3,r.outstandingBefore||0,{sz:10,align:'right',fmt:'#,##0.00',fill:bg});
+    sCell(ws2,r2,4,r.days||0,{sz:10,align:'right',fill:bg});
+    sCell(ws2,r2,5,r.denom||365,{sz:10,align:'right',fill:bg});
+    sCell(ws2,r2,6,gross,{sz:10,align:'right',fmt:'#,##0.00',fill:bg});
+    let col = 7;
+    if (_showTDSCol2) {
+      sCell(ws2,r2,col++,tds10,{sz:10,align:'right',fmt:'#,##0.00',fill:bg});
+      sCell(ws2,r2,col++,net,{sz:10,align:'right',fmt:'#,##0.00',fill:bg});
+    }
+    sCell(ws2,r2,col++,slabTx,{sz:10,align:'right',fmt:'#,##0.00',fill:bg});
+    sCell(ws2,r2,col++,r.principal||0,{sz:10,align:'right',fmt:'#,##0.00',fill:bg});
+    sCell(ws2,r2,col++,inFY?'YES':'No',{sz:10,align:'center',bold:inFY,color:inFY?GREEN:undefined,fill:bg});
+    const note = r.date<=purchaseDate?'Before purchase':
+                 (saleDate&&r.date>saleDate?'After sale':'');
+    sCell(ws2,r2,col++,note,{sz:9,color:'64748B',fill:bg});
+    r2++;
+  });
+
+  const _lastCol2 = _showTDSCol2 ? 12 : 10;
+  ws2['!ref'] = XLSX.utils.encode_range({s:{r:0,c:0},e:{r:r2,c:_lastCol2}});
+  ws2['!cols'] = _showTDSCol2
+    ? [{wch:4},{wch:14},{wch:10},{wch:18},{wch:7},{wch:7},{wch:18},{wch:14},{wch:16},{wch:18},{wch:18},{wch:10},{wch:20}]
+    : [{wch:4},{wch:14},{wch:10},{wch:18},{wch:7},{wch:7},{wch:18},{wch:18},{wch:18},{wch:10},{wch:20}];
+  XLSX.utils.book_append_sheet(wb, ws2, 'Coupon Detail');
+
+  // ── Write file ───────────────────────────────────────────────────────────
+  const safeName = (bondName).replace(/[^a-zA-Z0-9 %]/g,'').trim().substring(0,25)||'Bond';
+  const fyLabel  = fyStr.replace('-','_');
+  XLSX.writeFile(wb, `${safeName}_TaxReport_FY${fyLabel}.xlsx`);
+  closeTaxDialog();
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// PORTFOLIO UI v2 — dialogs, rendering, user actions (positions + lots)
+// ═══════════════════════════════════════════════════════════════════════════
+
+function _fmtInr(n, dp) {
+  if (n == null || isNaN(n)) return '—';
+  dp = dp == null ? 2 : dp;
+  return '₹' + n.toLocaleString('en-IN', { minimumFractionDigits: dp, maximumFractionDigits: dp });
+}
+function _fmtPct(r, dp) {
+  if (r == null || isNaN(r)) return '—';
+  dp = dp == null ? 4 : dp;
+  return (r * 100).toFixed(dp) + '%';
+}
+function _escapeHtml(s) {
+  return String(s == null ? '' : s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+}
+function _fmtDate(d) {
+  if (!d) return '—';
+  const dt = d instanceof Date ? d : new Date(d);
+  if (isNaN(dt.getTime())) return '—';
+  const dd = String(dt.getDate()).padStart(2,'0');
+  const mm = String(dt.getMonth()+1).padStart(2,'0');
+  const yy = dt.getFullYear();
+  return `${dd}-${mm}-${yy}`;
+}
+
+// ── Add current bond to a portfolio ─────────────────────────────────────────
+function showAddToPortfolioDialog() {
+  if (!window._lastCalcMeta || !window._lastCalcRows) {
+    alert('Please calculate the bond first before adding to a portfolio.');
+    return;
+  }
+  document.getElementById('addToPortOverlay').style.display = 'flex';
+  const m = window._lastCalcMeta;
+  const defLabel = m.secName || m.isin || 'Untitled bond';
+  document.getElementById('addToPortLabel').value = defLabel;
+  document.getElementById('addToPortNotes').value = '';
+  // Pre-fill value date with the calc's value date
+  const vd = m.valueDate instanceof Date ? m.valueDate : (m.valueDate ? new Date(m.valueDate) : null);
+  if (vd && !isNaN(vd)) {
+    const iso = vd.toISOString().substring(0,10);
+    document.getElementById('addToPortValueDate').value = iso;
+  } else {
+    document.getElementById('addToPortValueDate').value = '';
+  }
+  document.getElementById('addToPortNewClient').value = '';
+  document.getElementById('addToPortSelected').value = '';
+  document.getElementById('addToPortMatchInfo').innerHTML = '';
+  _renderAddToPortfolioList();
+}
+
+function closeAddToPortfolioDialog() {
+  document.getElementById('addToPortOverlay').style.display = 'none';
+}
+
+function _renderAddToPortfolioList() {
+  const list = document.getElementById('addToPortList');
+  const portfolios = _portfolioStore.portfolios;
+  if (portfolios.length === 0) {
+    list.innerHTML = '<div style="font-size:12px;color:var(--text-dim);padding:10px;text-align:center;border:1px dashed var(--border);border-radius:6px;">No client portfolios yet. Create your first one below.</div>';
+    document.getElementById('addToPortSelected').value = '';
+    _refreshMatchInfo();
+    return;
+  }
+  const selected = document.getElementById('addToPortSelected').value;
+  const html = portfolios.map(p => {
+    const s = _portfolioSummary(p);
+    const isActive = p.id === selected;
+    return `<div onclick="document.getElementById('addToPortSelected').value='${p.id}';_renderAddToPortfolioList();_refreshMatchInfo();" style="padding:10px 12px;border:${isActive ? '2px solid #f59e0b' : '1px solid var(--border)'};border-radius:6px;cursor:pointer;background:${isActive ? 'rgba(245,158,11,0.08)' : 'var(--surface)'};display:flex;justify-content:space-between;align-items:center;">
+      <div>
+        <div style="font-size:13px;font-weight:600;color:var(--text);">${_escapeHtml(p.client.name || 'Unnamed client')}</div>
+        <div style="font-size:10px;color:var(--text-dim);margin-top:2px;">${s.positionCount} positions · ${s.lotCount} lots · FV ${_fmtInr(s.totalFVAtPurchase, 0)}</div>
+      </div>
+      ${isActive ? '<span style="font-size:14px;color:#f59e0b;">✓</span>' : ''}
+    </div>`;
+  }).join('');
+  list.innerHTML = html;
+}
+
+// When user picks a client, check if THIS bond's ISIN already exists as a position
+function _refreshMatchInfo() {
+  const portId = document.getElementById('addToPortSelected').value;
+  const info = document.getElementById('addToPortMatchInfo');
+  info.innerHTML = '';
+  if (!portId) return;
+  const port = _findPortfolio(portId);
+  const m = window._lastCalcMeta;
+  if (!port || !m) return;
+  const secKey = _securityKey({ isin: m.isin, secName: m.secName });
+  const existing = findPositionByKey(port, secKey);
+  if (existing) {
+    const pm = _positionMetrics(existing);
+    info.innerHTML = `<div style="background:rgba(34,197,94,0.10);border:1px solid #86efac;border-radius:6px;padding:10px 12px;font-size:11px;color:var(--text);">
+      <strong style="color:#16a34a;">↳ Existing position found</strong> — this lot will be added to <strong>${_escapeHtml(existing.secName || existing.isin)}</strong> (currently ${pm.lotCount} lot${pm.lotCount===1?'':'s'}, qty ${pm.qty}).
+    </div>`;
+  } else {
+    info.innerHTML = `<div style="background:rgba(59,130,246,0.10);border:1px solid #93c5fd;border-radius:6px;padding:10px 12px;font-size:11px;color:var(--text);">
+      <strong style="color:#2563eb;">+ New position</strong> — this bond doesn't exist in this portfolio yet. A new position will be created with this lot.
+    </div>`;
+  }
+}
+
+function _confirmAddToPortfolio() {
+  let portfolioId = document.getElementById('addToPortSelected').value;
+  const newClientName = document.getElementById('addToPortNewClient').value.trim();
+  const label = document.getElementById('addToPortLabel').value.trim();
+  const notes = document.getElementById('addToPortNotes').value.trim();
+  const valueDate = document.getElementById('addToPortValueDate').value;
+
+  if (!portfolioId && newClientName) {
+    const newP = createPortfolio(newClientName);
+    portfolioId = newP.id;
+  }
+  if (!portfolioId) {
+    alert('Select an existing client or enter a new client name.');
+    return;
+  }
+
+  const snap = _captureBondSnapshot();
+  if (!snap) { alert('No calculation available to capture.'); return; }
+
+  const result = addLotToPortfolio(portfolioId, snap, label, notes, { valueDate });
+  if (!result.ok) {
+    if (result.reason === 'template_mismatch') {
+      const ep = result.existingPosition;
+      const diffList = result.diffs.join(', ');
+      alert(`Cannot add lot — bond template mismatch.\n\nThe existing position "${ep.secName || ep.isin}" has different values for: ${diffList}.\n\nLots in the same position must share the same coupon, maturity, frequency, day count, etc. Either:\n  • Verify your inputs match the existing position, or\n  • Use a different ISIN if this is genuinely a different security.`);
+      return;
+    }
+    alert('Failed to add lot: ' + (result.reason || 'unknown error'));
+    return;
+  }
+
+  // Auto-expand the position so user sees their new lot
+  _expandedPositions.add(result.position.id);
+
+  const btn = document.getElementById('addToPortfolioBtn');
+  btn.textContent = result.isNewPosition ? '✓ Position added' : '✓ Lot added';
+  setTimeout(() => btn.textContent = '+ Add to Portfolio', 2200);
+  closeAddToPortfolioDialog();
+}
+
+// ── Portfolio Manager main overlay ──────────────────────────────────────────
+function showPortfolioManager(preselectId) {
+  document.getElementById('portManagerOverlay').style.display = 'flex';
+  if (preselectId) _activePortfolioId = preselectId;
+  _renderPortfolioManager();
+}
+
+function closePortfolioManager() {
+  document.getElementById('portManagerOverlay').style.display = 'none';
+}
+
+function _togglePosition(posId) {
+  if (_expandedPositions.has(posId)) _expandedPositions.delete(posId);
+  else _expandedPositions.add(posId);
+  _renderPortfolioManager();
+}
+
+function _renderPortfolioManager() {
+  // Sidebar: list of client portfolios
+  const sidebar = document.getElementById('portManagerSidebar');
+  const portfolios = _portfolioStore.portfolios;
+  if (portfolios.length === 0) {
+    sidebar.innerHTML = '<div style="font-size:12px;color:var(--text-dim);padding:16px;text-align:center;">No portfolios yet.<br><br>Calculate a bond and click<br><strong>+ Add to Portfolio</strong></div>';
+  } else {
+    sidebar.innerHTML = portfolios.map(p => {
+      const s = _portfolioSummary(p);
+      const isActive = p.id === _activePortfolioId;
+      return `<div onclick="_selectPortfolio('${p.id}')" style="padding:10px 12px;border-bottom:1px solid var(--border);cursor:pointer;background:${isActive ? 'rgba(245,158,11,0.12)' : 'transparent'};border-left:${isActive ? '3px solid #f59e0b' : '3px solid transparent'};">
+        <div style="font-size:13px;font-weight:600;color:var(--text);margin-bottom:3px;">${_escapeHtml(p.client.name || 'Unnamed')}</div>
+        <div style="font-size:10px;color:var(--text-dim);">${s.positionCount} pos · ${s.lotCount} lots · ${_fmtInr(s.totalFVAtPurchase, 0)}</div>
+      </div>`;
+    }).join('');
+  }
+
+  // Detail pane
+  const detail = document.getElementById('portManagerDetail');
+  if (!_activePortfolioId) {
+    detail.innerHTML = `<div style="padding:60px 40px;text-align:center;color:var(--text-dim);">
+      <div style="font-size:48px;margin-bottom:12px;">📊</div>
+      <div style="font-size:14px;font-weight:600;color:var(--text);margin-bottom:6px;">Select a client portfolio from the left</div>
+      <div style="font-size:11px;">Or import an existing portfolio from JSON</div>
+    </div>`;
+    return;
+  }
+  const p = _findPortfolio(_activePortfolioId);
+  if (!p) { detail.innerHTML = '<div style="padding:40px;color:var(--text-dim);">Portfolio not found.</div>'; return; }
+  const s = _portfolioSummary(p);
+
+  // Build positions table
+  let positionsHtml;
+  if (p.positions.length === 0) {
+    positionsHtml = `<div style="padding:40px;text-align:center;color:var(--text-dim);font-size:12px;border:1px dashed var(--border);border-radius:8px;">
+      No positions yet. Calculate a bond and click <strong>+ Add to Portfolio</strong>.
+    </div>`;
+  } else {
+    const rowsHtml = p.positions.map((pos, idx) => {
+      const pm = _positionMetrics(pos);
+      const isExpanded = _expandedPositions.has(pos.id);
+      const caret = isExpanded ? '▼' : '▶';
+      const todayForUI = new Date();
+      const lotRowsHtml = isExpanded ? pos.lots.map((l, li) => {
+        const lm = (l.bondState && l.bondState.meta) || {};
+        const lotFvAtPurchase = (l.fvAtPurchase != null && l.fvAtPurchase >= 0) ? l.fvAtPurchase : (l.fvTotal || 0);
+        const lotOutstanding = _outstandingFvForLot(l, todayForUI);
+        const isPartiallyRedeemed = lotOutstanding > 0.5 && lotOutstanding < lotFvAtPurchase - 0.5;
+        const isFullyRedeemed = lotOutstanding < 0.5 && lotFvAtPurchase > 0.5;
+        const osColor = isFullyRedeemed ? '#94a3b8' : (isPartiallyRedeemed ? '#7c3aed' : 'var(--text)');
+        const osLabel = isFullyRedeemed ? '<span style="font-size:9px;color:#94a3b8;font-style:italic;"> · matured</span>' : '';
+        // Lot row aligns with the 10 parent columns:
+        //   1: #               → ↳ N
+        //   2: Position/ISIN   → "Lot · valueDate" + notes
+        //   3: Type            → price%
+        //   4: Qty             → l.qty
+        //   5: FV at Purchase  → l.fvAtPurchase (buyer's claim at value date)
+        //   6: FV Outstanding  → lotOutstanding
+        //   7: Invested        → l.consideration
+        //   8: Wt. YTM         → lm.xirrRate
+        //   9: Maturity        → empty (matures with parent)
+        //   10: Actions        → Load + ✕
+        return `<tr style="background:rgba(245,158,11,0.04);">
+          <td style="padding:6px 10px;color:var(--text-dim);font-size:10px;text-align:right;">↳ ${li+1}</td>
+          <td style="padding:6px 10px;font-size:10px;">
+            <div style="color:var(--text);">Lot · ${_fmtDate(l.valueDate)}</div>
+            ${l.notes ? `<div style="font-size:9px;color:var(--text-dim);font-style:italic;margin-top:1px;">${_escapeHtml(l.notes)}</div>` : ''}
+          </td>
+          <td style="padding:6px 10px;font-size:10px;color:var(--text-dim);text-align:right;">${l.pricePct != null ? l.pricePct.toFixed(4) + '%' : '—'}</td>
+          <td style="padding:6px 10px;font-size:10px;color:var(--text-dim);text-align:right;">${l.qty || 1}</td>
+          <td style="padding:6px 10px;font-size:10px;color:var(--text-dim);text-align:right;">${_fmtInr(lotFvAtPurchase, 0)}</td>
+          <td style="padding:6px 10px;font-size:10px;text-align:right;color:${osColor};font-weight:${isPartiallyRedeemed ? '600' : '400'};">${_fmtInr(lotOutstanding, 0)}${osLabel}</td>
+          <td style="padding:6px 10px;font-size:10px;text-align:right;">${_fmtInr(l.consideration, 0)}</td>
+          <td style="padding:6px 10px;font-size:10px;text-align:right;color:var(--accent);">${_fmtPct(lm.xirrRate, 2)}</td>
+          <td style="padding:6px 10px;font-size:10px;color:var(--text-dim);">${l.sale ? `<span style="font-size:9px;background:rgba(124,58,237,0.12);color:#7c3aed;padding:2px 6px;border-radius:3px;font-weight:600;" title="Sold on ${_fmtDate(l.sale.date)} @ ${l.sale.pricePct}%">SOLD</span>` : ''}</td>
+          <td style="padding:6px 10px;font-size:10px;text-align:center;white-space:nowrap;">
+            <button onclick="event.stopPropagation();loadLotIntoCalc('${p.id}','${pos.id}','${l.id}')" title="Reload this lot into the calculator" style="background:none;border:1px solid var(--border);border-radius:4px;padding:2px 6px;margin:0 1px;cursor:pointer;font-size:9px;color:var(--text);">↑ Load</button>
+            <button onclick="event.stopPropagation();showMarkLotAsSoldDialog('${p.id}','${pos.id}','${l.id}')" title="${l.sale ? 'Edit sale entry' : 'Mark this lot as sold'}" style="background:none;border:1px solid ${l.sale ? '#7c3aed' : 'var(--border)'};border-radius:4px;padding:2px 6px;margin:0 1px;cursor:pointer;font-size:9px;color:${l.sale ? '#7c3aed' : 'var(--text)'};font-weight:${l.sale ? '600' : '400'};">${l.sale ? '✎ Sale' : '$ Sell'}</button>
+            <button onclick="event.stopPropagation();confirmRemoveLot('${p.id}','${pos.id}','${l.id}')" title="Remove this lot" style="background:none;border:1px solid #fca5a5;border-radius:4px;padding:2px 6px;margin:0 1px;cursor:pointer;font-size:9px;color:#dc2626;">✕</button>
+          </td>
+        </tr>`;
+      }).join('') : '';
+      // Position-level redemption state: outstanding vs purchase baseline
+      const isPosFullyRedeemed = pm.fvOutstanding < 0.5 && pm.fvAtPurchase > 0.5;
+      const isPosPartiallyRedeemed = pm.fvOutstanding > 0.5 && pm.fvOutstanding < pm.fvAtPurchase - 0.5;
+      const posOsColor = isPosFullyRedeemed ? '#94a3b8' : (isPosPartiallyRedeemed ? '#7c3aed' : 'var(--text)');
+      const posOsBadge = isPosFullyRedeemed ? '<span style="font-size:9px;color:#94a3b8;font-style:italic;"> matured</span>' : '';
+      return `<tr onclick="_togglePosition('${pos.id}')" style="cursor:pointer;border-top:2px solid var(--border);background:var(--surface);">
+        <td style="padding:10px;color:var(--text-dim);font-size:11px;">${idx+1}</td>
+        <td style="padding:10px;">
+          <div style="display:flex;align-items:center;gap:6px;">
+            <span style="font-size:10px;color:#f59e0b;width:12px;">${caret}</span>
+            <div>
+              <div style="font-weight:600;color:var(--text);font-size:12px;">${_escapeHtml(pos.secName)}</div>
+              <div style="font-size:10px;color:var(--text-dim);">${_escapeHtml(pos.isin || '—')} · ${pm.lotCount} lot${pm.lotCount===1?'':'s'}</div>
+            </div>
+          </div>
+        </td>
+        <td style="padding:10px;"><span style="font-size:9px;background:var(--bg);padding:2px 6px;border-radius:3px;color:var(--text-dim);text-transform:uppercase;letter-spacing:0.5px;">${_escapeHtml(pos.mode || 'regular')}</span></td>
+        <td style="padding:10px;text-align:right;font-weight:600;">${pm.qty}</td>
+        <td style="padding:10px;text-align:right;font-weight:600;">${_fmtInr(pm.fvAtPurchase, 0)}</td>
+        <td style="padding:10px;text-align:right;font-weight:${isPosPartiallyRedeemed ? '700' : '600'};color:${posOsColor};">${_fmtInr(pm.fvOutstanding, 0)}${posOsBadge}</td>
+        <td style="padding:10px;text-align:right;font-weight:600;">${_fmtInr(pm.invested, 0)}</td>
+        <td style="padding:10px;text-align:right;font-weight:600;color:var(--accent);">${_fmtPct(pm.wtdYTM, 2)}</td>
+        <td style="padding:10px;font-size:11px;">${_fmtDate(pos.bondTemplate.maturityDate)}</td>
+        <td style="padding:10px;text-align:center;white-space:nowrap;">
+          <button onclick="event.stopPropagation();confirmRemovePosition('${p.id}','${pos.id}')" title="Remove entire position (and all lots)" style="background:none;border:1px solid #fca5a5;border-radius:4px;padding:3px 8px;margin:0 2px;cursor:pointer;font-size:10px;color:#dc2626;">🗑</button>
+        </td>
+      </tr>
+      ${lotRowsHtml}`;
+    }).join('');
+
+    positionsHtml = `<div style="overflow-x:auto;border:1px solid var(--border);border-radius:8px;">
+      <table style="width:100%;border-collapse:collapse;font-size:11px;min-width:1040px;">
+        <thead>
+          <tr style="background:var(--bg);border-bottom:2px solid var(--border);">
+            <th style="padding:8px 10px;text-align:left;font-weight:600;color:var(--text-dim);letter-spacing:0.5px;">#</th>
+            <th style="padding:8px 10px;text-align:left;font-weight:600;color:var(--text-dim);letter-spacing:0.5px;">Position / ISIN</th>
+            <th style="padding:8px 10px;text-align:left;font-weight:600;color:var(--text-dim);letter-spacing:0.5px;">Type</th>
+            <th style="padding:8px 10px;text-align:right;font-weight:600;color:var(--text-dim);letter-spacing:0.5px;">Qty</th>
+            <th style="padding:8px 10px;text-align:right;font-weight:600;color:var(--text-dim);letter-spacing:0.5px;" title="Outstanding face value at the lot's value date — what the buyer actually has a claim on (relevant for bonds entering mid-amortization)">FV at Purchase</th>
+            <th style="padding:8px 10px;text-align:right;font-weight:600;color:var(--text-dim);letter-spacing:0.5px;" title="Outstanding face value as of today (after any post-purchase principal redemptions)">FV Outstanding</th>
+            <th style="padding:8px 10px;text-align:right;font-weight:600;color:var(--text-dim);letter-spacing:0.5px;">Invested</th>
+            <th style="padding:8px 10px;text-align:right;font-weight:600;color:var(--text-dim);letter-spacing:0.5px;">Wt. YTM</th>
+            <th style="padding:8px 10px;text-align:left;font-weight:600;color:var(--text-dim);letter-spacing:0.5px;">Maturity</th>
+            <th style="padding:8px 10px;text-align:center;font-weight:600;color:var(--text-dim);letter-spacing:0.5px;">Actions</th>
+          </tr>
+        </thead>
+        <tbody>${rowsHtml}</tbody>
+      </table>
+    </div>
+    <div style="font-size:10px;color:var(--text-dim);margin-top:8px;padding:0 4px;">Click any position row to expand its lots. Wt. YTM is investment-weighted across lots. <strong>FV at Purchase</strong> = outstanding face value on the lot's value date (the buyer's actual claim). <strong>FV Outstanding</strong> reflects amounts after any post-purchase principal redemptions.</div>`;
+  }
+
+  // Bond mode mix chips
+  const modeChips = Object.entries(s.modes).map(([mode, count]) =>
+    `<span style="font-size:10px;background:var(--bg);padding:3px 8px;border-radius:10px;color:var(--text-dim);margin-right:4px;">${mode}: ${count}</span>`
+  ).join('');
+
+  detail.innerHTML = `
+    <div style="padding:20px 24px;border-bottom:1px solid var(--border);background:var(--bg);">
+      <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:16px;">
+        <div style="flex:1;">
+          <div style="font-size:10px;color:var(--text-dim);text-transform:uppercase;letter-spacing:1px;margin-bottom:4px;">Client</div>
+          <div style="font-size:18px;font-weight:700;color:var(--text);">${_escapeHtml(p.client.name || 'Unnamed')}</div>
+          <div style="font-size:11px;color:var(--text-dim);margin-top:4px;">
+            ${p.client.pan ? 'PAN: ' + _escapeHtml(p.client.pan) + ' · ' : ''}
+            ${p.client.mobile ? 'Mobile: ' + _escapeHtml(p.client.mobile) + ' · ' : ''}
+            As of: ${p.asOfDate || '—'}
+          </div>
+          ${p.client.notes ? `<div style="font-size:11px;color:var(--text-dim);margin-top:6px;font-style:italic;">${_escapeHtml(p.client.notes)}</div>` : ''}
+        </div>
+        <div style="display:flex;gap:6px;flex-wrap:wrap;">
+          <button onclick="showEditClientDialog('${p.id}')" style="background:var(--surface);border:1px solid var(--border);border-radius:5px;padding:6px 10px;cursor:pointer;font-size:10px;color:var(--text);letter-spacing:0.5px;text-transform:uppercase;">✎ Edit Client</button>
+          <button onclick="exportPortfolioJSON('${p.id}')" style="background:var(--surface);border:1px solid var(--border);border-radius:5px;padding:6px 10px;cursor:pointer;font-size:10px;color:var(--text);letter-spacing:0.5px;text-transform:uppercase;">↓ Export JSON</button>
+          <button onclick="confirmDeletePortfolio('${p.id}')" style="background:var(--surface);border:1px solid #fca5a5;border-radius:5px;padding:6px 10px;cursor:pointer;font-size:10px;color:#dc2626;letter-spacing:0.5px;text-transform:uppercase;">🗑 Delete</button>
+        </div>
+      </div>
+    </div>
+
+    <div style="padding:16px 24px;display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:12px;border-bottom:1px solid var(--border);">
+      <div style="background:var(--surface);border:1px solid var(--border);border-radius:6px;padding:10px 12px;">
+        <div style="font-size:9px;color:var(--text-dim);text-transform:uppercase;letter-spacing:1px;margin-bottom:4px;">Positions</div>
+        <div style="font-size:18px;font-weight:700;color:var(--text);">${s.positionCount} <span style="font-size:11px;font-weight:400;color:var(--text-dim);">(${s.lotCount} lots)</span></div>
+      </div>
+      <div style="background:var(--surface);border:1px solid var(--border);border-radius:6px;padding:10px 12px;">
+        <div style="font-size:9px;color:var(--text-dim);text-transform:uppercase;letter-spacing:1px;margin-bottom:4px;" title="Sum of FV at Purchase across lots — what the buyer had a claim on at value date">FV at Purchase</div>
+        <div style="font-size:18px;font-weight:700;color:var(--text);">${_fmtInr(s.totalFVAtPurchase, 0)}</div>
+      </div>
+      <div style="background:var(--surface);border:1px solid var(--border);border-radius:6px;padding:10px 12px;">
+        <div style="font-size:9px;color:var(--text-dim);text-transform:uppercase;letter-spacing:1px;margin-bottom:4px;" title="Outstanding face value as of today (after any post-purchase principal redemptions)">FV Outstanding</div>
+        <div style="font-size:18px;font-weight:700;color:${s.totalFVOutstanding < s.totalFVAtPurchase - 0.5 ? '#7c3aed' : 'var(--text)'};">${_fmtInr(s.totalFVOutstanding, 0)}</div>
+      </div>
+      <div style="background:var(--surface);border:1px solid var(--border);border-radius:6px;padding:10px 12px;">
+        <div style="font-size:9px;color:var(--text-dim);text-transform:uppercase;letter-spacing:1px;margin-bottom:4px;">Total Invested</div>
+        <div style="font-size:18px;font-weight:700;color:var(--text);">${_fmtInr(s.totalInvestment, 0)}</div>
+      </div>
+      <div style="background:var(--surface);border:1px solid var(--border);border-radius:6px;padding:10px 12px;">
+        <div style="font-size:9px;color:var(--text-dim);text-transform:uppercase;letter-spacing:1px;margin-bottom:4px;">Wt. Avg YTM</div>
+        <div style="font-size:18px;font-weight:700;color:var(--accent);">${_fmtPct(s.weightedYTM, 2)}</div>
+      </div>
+    </div>
+
+    ${modeChips ? `<div style="padding:10px 24px 0 24px;">${modeChips}</div>` : ''}
+
+    <div style="padding:16px 24px;">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;">
+        <div style="font-size:12px;font-weight:600;color:var(--text);letter-spacing:0.5px;text-transform:uppercase;">Positions & Lots</div>
+        <div style="display:flex;gap:6px;align-items:center;">
+          <button onclick="showCashflowDialog('${p.id}')" style="background:var(--accent);color:#fff;border:none;border-radius:5px;padding:6px 12px;font-size:10px;letter-spacing:0.5px;text-transform:uppercase;cursor:pointer;font-weight:600;" title="Generate consolidated cashflow Excel report (4 sheets)">↓ Consolidated Cashflow</button>
+          <button onclick="showPortfolioTaxReportDialog('${p.id}')" style="background:#7c3aed;color:#fff;border:none;border-radius:5px;padding:6px 12px;font-size:10px;letter-spacing:0.5px;text-transform:uppercase;cursor:pointer;font-weight:600;" title="Generate consolidated FY tax report Excel">↓ Tax Report</button>
+        </div>
+      </div>
+      ${positionsHtml}
+    </div>
+  `;
+}
+
+function _selectPortfolio(id) {
+  _activePortfolioId = id;
+  _renderPortfolioManager();
+}
+
+function confirmDeletePortfolio(id) {
+  const p = _findPortfolio(id);
+  if (!p) return;
+  const s = _portfolioSummary(p);
+  if (!confirm(`Delete portfolio for "${p.client.name || 'Unnamed'}" with ${s.positionCount} position(s) and ${s.lotCount} lot(s)?\n\nThis cannot be undone. Consider exporting JSON first.`)) return;
+  deletePortfolio(id);
+  _renderPortfolioManager();
+}
+
+function confirmRemovePosition(portfolioId, positionId) {
+  const p = _findPortfolio(portfolioId);
+  const pos = _findPosition(p, positionId);
+  if (!pos) return;
+  const pm = _positionMetrics(pos);
+  if (!confirm(`Remove the entire position "${pos.secName || pos.isin}" along with all ${pm.lotCount} lot(s)?\n\nThis cannot be undone.`)) return;
+  removePosition(portfolioId, positionId);
+  _renderPortfolioManager();
+}
+
+function confirmRemoveLot(portfolioId, positionId, lotId) {
+  const p = _findPortfolio(portfolioId);
+  const pos = _findPosition(p, positionId);
+  const lot = _findLot(pos, lotId);
+  if (!lot) return;
+  const isLast = pos.lots.length === 1;
+  const msg = isLast
+    ? `Remove this lot? It is the last lot in "${pos.secName || pos.isin}", so the entire position will be deleted.`
+    : `Remove this lot dated ${_fmtDate(lot.valueDate)} (qty ${lot.qty})? Other lots in this position will remain.`;
+  if (!confirm(msg)) return;
+  removeLotFromPosition(portfolioId, positionId, lotId);
+  _renderPortfolioManager();
+}
+
+// Load a lot's snapshot back into the main calculator
+function loadLotIntoCalc(portfolioId, positionId, lotId) {
+  const p = _findPortfolio(portfolioId);
+  const pos = _findPosition(p, positionId);
+  const lot = _findLot(pos, lotId);
+  if (!lot) { alert('Lot not found'); return; }
+  const formInputs = lot.bondState && lot.bondState.formInputs;
+  if (!formInputs) { alert('No form state in this lot.'); return; }
+  _savedBonds.push(formInputs);
+  const tempIdx = _savedBonds.length - 1;
+  try {
+    window._loadingBond = true;
+    loadBond(tempIdx);
+  } finally {
+    _savedBonds.pop();
+    window._loadingBond = false;
+  }
+  closePortfolioManager();
+  window.scrollTo({ top: 0, behavior: 'smooth' });
+}
+
+// ── Edit client info dialog ─────────────────────────────────────────────────
+function showEditClientDialog(portfolioId) {
+  const p = _findPortfolio(portfolioId);
+  if (!p) return;
+  document.getElementById('editClientPortId').value = portfolioId;
+  document.getElementById('editClientName').value   = p.client.name   || '';
+  document.getElementById('editClientPan').value    = p.client.pan    || '';
+  document.getElementById('editClientMobile').value = p.client.mobile || '';
+  document.getElementById('editClientNotes').value  = p.client.notes  || '';
+  document.getElementById('editClientAsOf').value   = p.asOfDate      || '';
+  document.getElementById('editClientOverlay').style.display = 'flex';
+}
+function closeEditClientDialog() {
+  document.getElementById('editClientOverlay').style.display = 'none';
+}
+function _saveClientEdit() {
+  const id = document.getElementById('editClientPortId').value;
+  const name   = document.getElementById('editClientName').value.trim();
+  const pan    = document.getElementById('editClientPan').value.trim().toUpperCase();
+  const mobile = document.getElementById('editClientMobile').value.trim();
+  const notes  = document.getElementById('editClientNotes').value.trim();
+  const asOf   = document.getElementById('editClientAsOf').value;
+  if (!name) { alert('Client name is required'); return; }
+  const p = _findPortfolio(id);
+  if (!p) return;
+  p.client = { name, pan, mobile, notes };
+  if (asOf) p.asOfDate = asOf;
+  p.updatedAt = new Date().toISOString();
+  _savePortfolioStore();
+  closeEditClientDialog();
+  _renderPortfolioManager();
+}
+
+// ── Import portfolio from JSON file ─────────────────────────────────────────
+function triggerImportPortfolio() {
+  document.getElementById('portImportFile').click();
+}
+function _handlePortfolioImport(ev) {
+  const files = ev.target.files;
+  if (!files || files.length === 0) return;
+  importPortfolioJSON(files[0])
+    .then(res => {
+      alert(`Import complete.\nAdded: ${res.added}\nSkipped (duplicate ID or invalid): ${res.skipped}`);
+      _renderPortfolioManager();
+    })
+    .catch(err => {
+      alert('Import failed: ' + (err.message || err));
+    });
+  ev.target.value = '';
+}
+
+</script>
+
+<!-- ─── TAX REPORT DIALOG ─────────────────────────────────────────────────── -->
+<div id="taxReportOverlay" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.7);z-index:9000;align-items:center;justify-content:center;">
+  <div style="background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:28px 32px;width:460px;max-width:95vw;box-shadow:0 24px 60px rgba(0,0,0,0.5);">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:20px;">
+      <span style="font-size:14px;font-weight:700;color:var(--text);letter-spacing:0.5px;">📋 Indian FY Tax Report</span>
+      <button onclick="closeTaxDialog()" style="background:none;border:none;color:var(--text-dim);font-size:18px;cursor:pointer;line-height:1;">✕</button>
+    </div>
+
+    <div style="display:grid;gap:14px;">
+
+      <!-- Purchase date -->
+      <div>
+        <label style="font-size:10px;color:var(--text-dim);letter-spacing:1px;text-transform:uppercase;display:block;margin-bottom:4px;">Purchase Date *</label>
+        <input type="date" id="taxPurchaseDate" style="width:100%;background:var(--bg);border:1px solid var(--border);border-radius:6px;padding:8px 10px;color:var(--text);font-size:12px;box-sizing:border-box;" />
+        <div style="font-size:10px;color:var(--text-dim);margin-top:3px;">Date you purchased this bond (for holding period & CG calculation)</div>
+      </div>
+
+      <!-- Purchase price -->
+      <div>
+        <label style="font-size:10px;color:var(--text-dim);letter-spacing:1px;text-transform:uppercase;display:block;margin-bottom:4px;">Purchase Price (% of FV) *</label>
+        <input type="number" id="taxPurchasePrice" step="0.0001" placeholder="e.g. 98.5000" style="width:100%;background:var(--bg);border:1px solid var(--border);border-radius:6px;padding:8px 10px;color:var(--text);font-size:12px;box-sizing:border-box;" />
+        <div style="font-size:10px;color:var(--text-dim);margin-top:3px;">Clean price at which you purchased (% of original face value)</div>
+      </div>
+
+      <!-- Accrued paid at purchase -->
+      <div>
+        <label style="font-size:10px;color:var(--text-dim);letter-spacing:1px;text-transform:uppercase;display:block;margin-bottom:4px;">Accrued Interest Paid at Purchase (₹)</label>
+        <input type="number" id="taxPurchaseAccrued" step="0.01" placeholder="0.00  (0 if purchased on IP date or ex-div)" style="width:100%;background:var(--bg);border:1px solid var(--border);border-radius:6px;padding:8px 10px;color:var(--text);font-size:12px;box-sizing:border-box;" />
+        <div style="font-size:10px;color:var(--text-dim);margin-top:3px;">Accrued you paid at purchase — deductible from interest income (Sec 145A)</div>
+      </div>
+
+      <!-- Financial Year -->
+      <div>
+        <label style="font-size:10px;color:var(--text-dim);letter-spacing:1px;text-transform:uppercase;display:block;margin-bottom:4px;">Financial Year *</label>
+        <select id="taxFY" style="width:100%;background:var(--bg);border:1px solid var(--border);border-radius:6px;padding:8px 10px;color:var(--text);font-size:12px;box-sizing:border-box;">
+          <option value="2024-25">FY 2024–25 (Apr 2024 – Mar 2025)</option>
+          <option value="2025-26" selected>FY 2025–26 (Apr 2025 – Mar 2026)</option>
+          <option value="2026-27">FY 2026–27 (Apr 2026 – Mar 2027)</option>
+          <option value="2027-28">FY 2027–28 (Apr 2027 – Mar 2028)</option>
+          <option value="2028-29">FY 2028–29 (Apr 2028 – Mar 2029)</option>
+        </select>
+      </div>
+
+      <!-- Tax slab -->
+      <div>
+        <label style="font-size:10px;color:var(--text-dim);letter-spacing:1px;text-transform:uppercase;display:block;margin-bottom:4px;">Client Tax Slab (for interest income)</label>
+        <select id="taxSlab" style="width:100%;background:var(--bg);border:1px solid var(--border);border-radius:6px;padding:8px 10px;color:var(--text);font-size:12px;box-sizing:border-box;">
+          <option value="0">Nil (exempt)</option>
+          <option value="0.05">5%</option>
+          <option value="0.10">10%</option>
+          <option value="0.20">20%</option>
+          <option value="0.30" selected>30% (HNI / default)</option>
+        </select>
+      </div>
+
+      <!-- Sold in this FY? -->
+      <div style="display:flex;align-items:center;gap:10px;">
+        <input type="checkbox" id="taxSoldInFY" onchange="toggleTaxSaleFields()" style="width:16px;height:16px;accent-color:#7c3aed;" />
+        <label for="taxSoldInFY" style="font-size:12px;color:var(--text);cursor:pointer;">Bond was sold during this FY</label>
+      </div>
+
+      <!-- Sale fields (hidden unless sold) -->
+      <div id="taxSaleFields" style="display:none;background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:14px;display:none;">
+        <div style="font-size:10px;color:var(--text-dim);margin-bottom:10px;letter-spacing:1px;text-transform:uppercase;">Sale Details</div>
+        <div style="display:grid;gap:10px;">
+          <div>
+            <label style="font-size:10px;color:var(--text-dim);display:block;margin-bottom:3px;">Sale Date</label>
+            <input type="date" id="taxSaleDate" onchange="computeSaleAccruedAuto()" style="width:100%;background:var(--surface);border:1px solid var(--border);border-radius:5px;padding:7px 9px;color:var(--text);font-size:12px;box-sizing:border-box;" />
+          </div>
+          <div>
+            <label style="font-size:10px;color:var(--text-dim);display:block;margin-bottom:3px;">Sale Price (% of FV)</label>
+            <input type="number" id="taxSalePrice" step="0.0001" placeholder="e.g. 101.2500" style="width:100%;background:var(--surface);border:1px solid var(--border);border-radius:5px;padding:7px 9px;color:var(--text);font-size:12px;box-sizing:border-box;" />
+          </div>
+          <div>
+            <label style="font-size:10px;color:var(--text-dim);display:block;margin-bottom:3px;">Accrued Received at Sale (₹) <span style="font-size:9px;color:#7c3aed;font-weight:400;">· auto-filled from sale date, editable</span></label>
+            <input type="number" id="taxSaleAccrued" step="0.01" placeholder="0.00 (auto on sale date entry)" style="width:100%;background:var(--surface);border:1px solid var(--border);border-radius:5px;padding:7px 9px;color:var(--text);font-size:12px;box-sizing:border-box;" />
+            <div style="font-size:9px;color:var(--text-dim);margin-top:3px;line-height:1.4;">Cum-div: accrued from last IP to sale date. Ex-div: negative accrued (credit to buyer — seller keeps upcoming coupon).</div>
+          </div>
+        </div>
+      </div>
+
+    </div>
+
+    <div style="display:flex;gap:10px;margin-top:22px;">
+      <button onclick="closeTaxDialog()" style="flex:1;background:var(--bg);border:1px solid var(--border);border-radius:6px;padding:10px;color:var(--text-dim);font-size:11px;cursor:pointer;">Cancel</button>
+      <button onclick="downloadTaxReport()" style="flex:2;background:#7c3aed;border:none;border-radius:6px;padding:10px;color:#fff;font-size:11px;font-weight:700;cursor:pointer;letter-spacing:0.5px;">↓ Generate Tax Report</button>
+    </div>
+  </div>
+</div>
+
+<!-- ═══ ADD TO PORTFOLIO DIALOG ═══════════════════════════════════════════ -->
+<div id="addToPortOverlay" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.7);z-index:9100;align-items:center;justify-content:center;">
+  <div style="background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:24px 28px;width:480px;max-width:95vw;max-height:90vh;overflow-y:auto;box-shadow:0 24px 60px rgba(0,0,0,0.5);">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:18px;">
+      <span style="font-size:14px;font-weight:700;color:var(--text);letter-spacing:0.5px;">📊 Add to Portfolio</span>
+      <button onclick="closeAddToPortfolioDialog()" style="background:none;border:none;color:var(--text-dim);font-size:18px;cursor:pointer;line-height:1;">✕</button>
+    </div>
+
+    <input type="hidden" id="addToPortSelected" value="" />
+
+    <div style="margin-bottom:14px;">
+      <label style="font-size:10px;color:var(--text-dim);text-transform:uppercase;letter-spacing:1px;display:block;margin-bottom:6px;">Select Existing Client</label>
+      <div id="addToPortList" style="display:flex;flex-direction:column;gap:6px;max-height:180px;overflow-y:auto;"></div>
+    </div>
+
+    <div style="text-align:center;margin:12px 0;font-size:10px;color:var(--text-dim);letter-spacing:2px;">— OR —</div>
+
+    <div style="margin-bottom:14px;">
+      <label style="font-size:10px;color:var(--text-dim);text-transform:uppercase;letter-spacing:1px;display:block;margin-bottom:6px;">Create New Client Portfolio</label>
+      <input type="text" id="addToPortNewClient" placeholder="Client name (e.g. Rajesh Shah)" style="width:100%;background:var(--bg);border:1px solid var(--border);border-radius:6px;padding:8px 10px;color:var(--text);font-size:12px;box-sizing:border-box;" />
+    </div>
+
+    <!-- Match info: shown when an existing client is selected -->
+    <div id="addToPortMatchInfo" style="margin:8px 0;"></div>
+
+    <div style="border-top:1px solid var(--border);padding-top:14px;margin-top:10px;">
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:10px;">
+        <div>
+          <label style="font-size:10px;color:var(--text-dim);text-transform:uppercase;letter-spacing:1px;display:block;margin-bottom:6px;">Value Date *</label>
+          <input type="date" id="addToPortValueDate" style="width:100%;background:var(--bg);border:1px solid var(--border);border-radius:6px;padding:8px 10px;color:var(--text);font-size:12px;box-sizing:border-box;" />
+          <div style="font-size:9px;color:var(--text-dim);margin-top:3px;">Settlement date of THIS lot. Pre-filled from calculator.</div>
+        </div>
+        <div>
+          <label style="font-size:10px;color:var(--text-dim);text-transform:uppercase;letter-spacing:1px;display:block;margin-bottom:6px;">Lot Label</label>
+          <input type="text" id="addToPortLabel" placeholder="e.g. REC NCD 7.45%" style="width:100%;background:var(--bg);border:1px solid var(--border);border-radius:6px;padding:8px 10px;color:var(--text);font-size:12px;box-sizing:border-box;" />
+        </div>
+      </div>
+
+      <label style="font-size:10px;color:var(--text-dim);text-transform:uppercase;letter-spacing:1px;display:block;margin-bottom:6px;">Notes (optional)</label>
+      <textarea id="addToPortNotes" rows="2" placeholder="Any notes about this lot — e.g. Block deal, secondary market, Apr-26 tranche…" style="width:100%;background:var(--bg);border:1px solid var(--border);border-radius:6px;padding:8px 10px;color:var(--text);font-size:12px;box-sizing:border-box;resize:vertical;font-family:inherit;"></textarea>
+    </div>
+
+    <div style="display:flex;gap:10px;margin-top:18px;">
+      <button onclick="closeAddToPortfolioDialog()" style="flex:1;background:var(--bg);border:1px solid var(--border);border-radius:6px;padding:10px;color:var(--text-dim);font-size:11px;cursor:pointer;">Cancel</button>
+      <button onclick="_confirmAddToPortfolio()" style="flex:2;background:#f59e0b;border:none;border-radius:6px;padding:10px;color:#fff;font-size:11px;font-weight:700;cursor:pointer;letter-spacing:0.5px;">+ Add Lot</button>
+    </div>
+  </div>
+</div>
+
+<!-- ═══ PORTFOLIO MANAGER OVERLAY ═════════════════════════════════════════ -->
+<div id="portManagerOverlay" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.7);z-index:9050;align-items:center;justify-content:center;">
+  <div style="background:var(--surface);border:1px solid var(--border);border-radius:12px;width:1100px;max-width:97vw;height:85vh;display:flex;flex-direction:column;box-shadow:0 24px 60px rgba(0,0,0,0.5);overflow:hidden;">
+    <!-- Header -->
+    <div style="display:flex;justify-content:space-between;align-items:center;padding:18px 24px;border-bottom:1px solid var(--border);background:var(--bg);">
+      <div style="display:flex;align-items:center;gap:14px;">
+        <span style="font-size:16px;font-weight:700;color:var(--text);letter-spacing:0.5px;">📊 Portfolio Manager</span>
+        <span style="font-size:10px;color:var(--text-dim);background:rgba(245,158,11,0.15);color:#b45309;padding:2px 8px;border-radius:10px;font-weight:600;">Phase 1 — Beta</span>
+      </div>
+      <div style="display:flex;gap:8px;align-items:center;">
+        <button onclick="triggerImportPortfolio()" style="background:var(--surface);border:1px solid var(--border);border-radius:5px;padding:6px 10px;cursor:pointer;font-size:10px;color:var(--text);letter-spacing:0.5px;text-transform:uppercase;">↑ Import JSON</button>
+        <button onclick="exportAllPortfoliosJSON()" style="background:var(--surface);border:1px solid var(--border);border-radius:5px;padding:6px 10px;cursor:pointer;font-size:10px;color:var(--text);letter-spacing:0.5px;text-transform:uppercase;">↓ Export All</button>
+        <button onclick="closePortfolioManager()" style="background:none;border:none;color:var(--text-dim);font-size:20px;cursor:pointer;line-height:1;padding:0 6px;">✕</button>
+      </div>
+    </div>
+
+    <!-- Body: sidebar + detail -->
+    <div style="display:flex;flex:1;overflow:hidden;">
+      <!-- Sidebar: list of clients -->
+      <div style="width:240px;border-right:1px solid var(--border);background:var(--bg);overflow-y:auto;flex-shrink:0;">
+        <div style="padding:12px 14px;border-bottom:1px solid var(--border);font-size:10px;color:var(--text-dim);text-transform:uppercase;letter-spacing:1px;font-weight:600;">Clients</div>
+        <div id="portManagerSidebar"></div>
+      </div>
+      <!-- Detail pane -->
+      <div id="portManagerDetail" style="flex:1;overflow-y:auto;"></div>
+    </div>
+  </div>
+</div>
+
+<!-- ═══ EDIT CLIENT DIALOG ═══════════════════════════════════════════════ -->
+<div id="editClientOverlay" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.7);z-index:9150;align-items:center;justify-content:center;">
+  <div style="background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:24px 28px;width:440px;max-width:95vw;box-shadow:0 24px 60px rgba(0,0,0,0.5);">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:18px;">
+      <span style="font-size:14px;font-weight:700;color:var(--text);letter-spacing:0.5px;">✎ Edit Client Details</span>
+      <button onclick="closeEditClientDialog()" style="background:none;border:none;color:var(--text-dim);font-size:18px;cursor:pointer;line-height:1;">✕</button>
+    </div>
+
+    <input type="hidden" id="editClientPortId" value="" />
+
+    <div style="display:grid;gap:12px;">
+      <div>
+        <label style="font-size:10px;color:var(--text-dim);text-transform:uppercase;letter-spacing:1px;display:block;margin-bottom:4px;">Client Name *</label>
+        <input type="text" id="editClientName" style="width:100%;background:var(--bg);border:1px solid var(--border);border-radius:6px;padding:8px 10px;color:var(--text);font-size:12px;box-sizing:border-box;" />
+      </div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;">
+        <div>
+          <label style="font-size:10px;color:var(--text-dim);text-transform:uppercase;letter-spacing:1px;display:block;margin-bottom:4px;">PAN</label>
+          <input type="text" id="editClientPan" placeholder="ABCDE1234F" maxlength="10" style="width:100%;background:var(--bg);border:1px solid var(--border);border-radius:6px;padding:8px 10px;color:var(--text);font-size:12px;box-sizing:border-box;text-transform:uppercase;" />
+        </div>
+        <div>
+          <label style="font-size:10px;color:var(--text-dim);text-transform:uppercase;letter-spacing:1px;display:block;margin-bottom:4px;">Mobile</label>
+          <input type="text" id="editClientMobile" placeholder="+91-…" style="width:100%;background:var(--bg);border:1px solid var(--border);border-radius:6px;padding:8px 10px;color:var(--text);font-size:12px;box-sizing:border-box;" />
+        </div>
+      </div>
+      <div>
+        <label style="font-size:10px;color:var(--text-dim);text-transform:uppercase;letter-spacing:1px;display:block;margin-bottom:4px;">As-of Date</label>
+        <input type="date" id="editClientAsOf" style="width:100%;background:var(--bg);border:1px solid var(--border);border-radius:6px;padding:8px 10px;color:var(--text);font-size:12px;box-sizing:border-box;" />
+      </div>
+      <div>
+        <label style="font-size:10px;color:var(--text-dim);text-transform:uppercase;letter-spacing:1px;display:block;margin-bottom:4px;">Notes</label>
+        <textarea id="editClientNotes" rows="3" placeholder="Risk profile, contact preferences, etc." style="width:100%;background:var(--bg);border:1px solid var(--border);border-radius:6px;padding:8px 10px;color:var(--text);font-size:12px;box-sizing:border-box;resize:vertical;font-family:inherit;"></textarea>
+      </div>
+    </div>
+
+    <div style="display:flex;gap:10px;margin-top:18px;">
+      <button onclick="closeEditClientDialog()" style="flex:1;background:var(--bg);border:1px solid var(--border);border-radius:6px;padding:10px;color:var(--text-dim);font-size:11px;cursor:pointer;">Cancel</button>
+      <button onclick="_saveClientEdit()" style="flex:2;background:#f59e0b;border:none;border-radius:6px;padding:10px;color:#fff;font-size:11px;font-weight:700;cursor:pointer;letter-spacing:0.5px;">💾 Save Changes</button>
+    </div>
+  </div>
+</div>
+
+<!-- ═══ CONSOLIDATED CASHFLOW DIALOG ════════════════════════════════════ -->
+<div id="cashflowDialogOverlay" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.7);z-index:9120;align-items:center;justify-content:center;">
+  <div style="background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:24px 28px;width:460px;max-width:95vw;box-shadow:0 24px 60px rgba(0,0,0,0.5);">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:18px;">
+      <span style="font-size:14px;font-weight:700;color:var(--text);letter-spacing:0.5px;">↓ Consolidated Cashflow Report</span>
+      <button onclick="closeCashflowDialog()" style="background:none;border:none;color:var(--text-dim);font-size:18px;cursor:pointer;line-height:1;">✕</button>
+    </div>
+
+    <input type="hidden" id="cashflowDialogPortId" value="" />
+
+    <div style="background:rgba(245,158,11,0.08);border:1px solid #fcd34d;border-radius:6px;padding:10px 12px;margin-bottom:16px;font-size:11px;color:var(--text);">
+      <div id="cashflowDialogSummary" style="font-weight:600;margin-bottom:4px;"></div>
+      <div style="font-size:10px;color:var(--text-dim);">Generates a 4-sheet Excel: Summary · Cashflow · Daily Aggregated · Per-Position</div>
+    </div>
+
+    <div style="margin-bottom:14px;">
+      <label style="font-size:10px;color:var(--text-dim);text-transform:uppercase;letter-spacing:1px;display:block;margin-bottom:6px;">As-of Date *</label>
+      <input type="date" id="cashflowAsOf" style="width:100%;background:var(--bg);border:1px solid var(--border);border-radius:6px;padding:8px 10px;color:var(--text);font-size:12px;box-sizing:border-box;" />
+      <div style="font-size:9px;color:var(--text-dim);margin-top:4px;line-height:1.4;">Cashflow projection starts from this date — only events strictly AFTER this date are included. Defaults to portfolio's as-of date or today.</div>
+    </div>
+
+    <div style="background:var(--bg);border:1px solid var(--border);border-radius:6px;padding:10px 12px;margin-bottom:14px;font-size:10px;color:var(--text-dim);line-height:1.5;">
+      <strong style="color:var(--text);">Tax Treatment in this report:</strong><br>
+      • Taxable corporate bonds: 10% TDS u/s 193 on coupons (above ₹5,000/yr threshold)<br>
+      • Tax-Free bonds (Sec 10(15)): No TDS, no tax on interest<br>
+      • G-Secs: No TDS on coupons; interest taxable at slab<br>
+      • ZCBs: No periodic coupon (accretion handled in Tax Report)<br>
+      Each lot's tax slab (saved at calc time) is used for post-tax columns.
+    </div>
+
+    <div style="display:flex;gap:10px;margin-top:18px;">
+      <button onclick="closeCashflowDialog()" style="flex:1;background:var(--bg);border:1px solid var(--border);border-radius:6px;padding:10px;color:var(--text-dim);font-size:11px;cursor:pointer;">Cancel</button>
+      <button onclick="_generateCashflow()" style="flex:2;background:var(--accent);border:none;border-radius:6px;padding:10px;color:#fff;font-size:11px;font-weight:700;cursor:pointer;letter-spacing:0.5px;">↓ Generate Excel</button>
+    </div>
+  </div>
+</div>
+
+<!-- ═══ PORTFOLIO TAX REPORT DIALOG ════════════════════════════════════ -->
+<div id="portTaxDialogOverlay" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.7);z-index:9130;align-items:center;justify-content:center;">
+  <div style="background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:24px 28px;width:480px;max-width:95vw;box-shadow:0 24px 60px rgba(0,0,0,0.5);">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:18px;">
+      <span style="font-size:14px;font-weight:700;color:var(--text);letter-spacing:0.5px;">↓ Consolidated Tax Report</span>
+      <button onclick="closePortfolioTaxReportDialog()" style="background:none;border:none;color:var(--text-dim);font-size:18px;cursor:pointer;line-height:1;">✕</button>
+    </div>
+    <input type="hidden" id="portTaxDialogPortId" value="" />
+    <div style="background:rgba(124,58,237,0.08);border:1px solid #c4b5fd;border-radius:6px;padding:10px 12px;margin-bottom:16px;font-size:11px;color:var(--text);">
+      <div id="portTaxDialogSummary" style="font-weight:600;margin-bottom:4px;"></div>
+      <div style="font-size:10px;color:var(--text-dim);">Generates a multi-sheet Excel: Tax Summary · Schedule OS · Schedule EI (if any) · Schedule CG (if any) · Per-Lot Worksheet</div>
+    </div>
+    <div style="margin-bottom:14px;">
+      <label style="font-size:10px;color:var(--text-dim);text-transform:uppercase;letter-spacing:1px;display:block;margin-bottom:6px;">Financial Year *</label>
+      <select id="portTaxFY" style="width:100%;background:var(--bg);border:1px solid var(--border);border-radius:6px;padding:8px 10px;color:var(--text);font-size:12px;box-sizing:border-box;"></select>
+      <div style="font-size:9px;color:var(--text-dim);margin-top:4px;line-height:1.4;">FY runs Apr 1 – Mar 31 (Indian convention). Defaults to current FY.</div>
+    </div>
+    <div style="background:var(--bg);border:1px solid var(--border);border-radius:6px;padding:10px 12px;margin-bottom:14px;font-size:10px;color:var(--text-dim);line-height:1.5;">
+      <strong style="color:var(--text);">Tax Treatment:</strong><br>
+      • Coupons aggregated per bond per FY · Sec 145A accrual adjustment computed per lot<br>
+      • Tax-free bonds (Sec 10(15)) → Schedule EI (exempt)<br>
+      • Capital gains computed only for lots explicitly marked as sold via the lot's "Sale" entry<br>
+      • Listed bond LTCG @ 12.5% (>12 months) · STCG at slab (per lot's stored slab)<br>
+      • TDS @ 10% u/s 193 on listed taxable corporate bond coupons
+    </div>
+    <div style="display:flex;gap:10px;margin-top:18px;">
+      <button onclick="closePortfolioTaxReportDialog()" style="flex:1;background:var(--bg);border:1px solid var(--border);border-radius:6px;padding:10px;color:var(--text-dim);font-size:11px;cursor:pointer;">Cancel</button>
+      <button onclick="_generatePortfolioTaxReport()" style="flex:2;background:#7c3aed;border:none;border-radius:6px;padding:10px;color:#fff;font-size:11px;font-weight:700;cursor:pointer;letter-spacing:0.5px;">↓ Generate Tax Report</button>
+    </div>
+  </div>
+</div>
+
+<!-- ═══ MARK LOT AS SOLD DIALOG ════════════════════════════════════════ -->
+<div id="saleDialogOverlay" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.7);z-index:9140;align-items:center;justify-content:center;">
+  <div style="background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:24px 28px;width:440px;max-width:95vw;box-shadow:0 24px 60px rgba(0,0,0,0.5);">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:18px;">
+      <span style="font-size:14px;font-weight:700;color:var(--text);letter-spacing:0.5px;">$ Mark Lot as Sold</span>
+      <button onclick="closeSaleDialog()" style="background:none;border:none;color:var(--text-dim);font-size:18px;cursor:pointer;line-height:1;">✕</button>
+    </div>
+    <div id="saleDialogLotInfo" style="background:rgba(124,58,237,0.08);border:1px solid #c4b5fd;border-radius:6px;padding:10px 12px;margin-bottom:16px;font-size:11px;color:var(--text);font-weight:600;"></div>
+    <div style="display:grid;gap:12px;">
+      <div>
+        <label style="font-size:10px;color:var(--text-dim);text-transform:uppercase;letter-spacing:1px;display:block;margin-bottom:4px;">Sale Date *</label>
+        <input type="date" id="saleDialogDate" onchange="_computeLotSaleAccruedAuto()" style="width:100%;background:var(--bg);border:1px solid var(--border);border-radius:6px;padding:8px 10px;color:var(--text);font-size:12px;box-sizing:border-box;" />
+      </div>
+      <div>
+        <label style="font-size:10px;color:var(--text-dim);text-transform:uppercase;letter-spacing:1px;display:block;margin-bottom:4px;">Sale Price (% of FV) *</label>
+        <input type="number" id="saleDialogPrice" step="0.0001" placeholder="e.g. 101.5000" style="width:100%;background:var(--bg);border:1px solid var(--border);border-radius:6px;padding:8px 10px;color:var(--text);font-size:12px;box-sizing:border-box;" />
+        <div style="font-size:9px;color:var(--text-dim);margin-top:3px;">Clean price at which the lot was sold</div>
+      </div>
+      <div>
+        <label style="font-size:10px;color:var(--text-dim);text-transform:uppercase;letter-spacing:1px;display:block;margin-bottom:4px;">Accrued Received at Sale (₹) <span style="font-size:9px;color:#7c3aed;font-weight:400;">· auto-filled from sale date, editable</span></label>
+        <input type="number" id="saleDialogAccrued" step="0.01" placeholder="0.00 (auto on sale date entry)" style="width:100%;background:var(--bg);border:1px solid var(--border);border-radius:6px;padding:8px 10px;color:var(--text);font-size:12px;box-sizing:border-box;" />
+        <div style="font-size:9px;color:var(--text-dim);margin-top:3px;line-height:1.4;">Cum-div: positive (last IP → sale date). Ex-div: negative (seller keeps next coupon, credits buyer). Affects Sec 145A in tax report.</div>
+      </div>
+    </div>
+    <div style="display:flex;gap:8px;margin-top:18px;">
+      <button id="saleDialogRemoveBtn" onclick="_removeSaleDialog()" style="display:none;background:var(--bg);border:1px solid #fca5a5;border-radius:6px;padding:10px;color:#dc2626;font-size:11px;cursor:pointer;">🗑 Remove</button>
+      <button onclick="closeSaleDialog()" style="flex:1;background:var(--bg);border:1px solid var(--border);border-radius:6px;padding:10px;color:var(--text-dim);font-size:11px;cursor:pointer;">Cancel</button>
+      <button onclick="_saveSaleDialog()" style="flex:2;background:#7c3aed;border:none;border-radius:6px;padding:10px;color:#fff;font-size:11px;font-weight:700;cursor:pointer;letter-spacing:0.5px;">💾 Save Sale</button>
+    </div>
+  </div>
+</div>
+
+<!-- Hidden file input for JSON import -->
+<input type="file" id="portImportFile" accept="application/json,.json" onchange="_handlePortfolioImport(event)" style="display:none;" />
+
+
+</body>
+</html>
