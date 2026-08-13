@@ -420,8 +420,8 @@ async function main() {
   log('═══════════════════════════════════════════════════');
   console.log('');
 
-  // Check for CSV import mode
-  const csvArg = process.argv.find(a => a.endsWith('.csv'));
+  // Check for CSV import mode (NSE Bhavcopy)
+  const csvArg = process.argv.find(a => a.endsWith('.csv') && !a.toLowerCase().includes('wdm') && !a.toLowerCase().includes('nsdl'));
   if (csvArg) {
     log(`Importing from CSV: ${csvArg}`);
     try {
@@ -477,9 +477,11 @@ async function main() {
       }
     }
 
-    if (fs.existsSync('nsdl_master.csv')) {
-      log('Found nsdl_master.csv! Merging structural details...');
-      const nsdlText = fs.readFileSync('nsdl_master.csv', 'utf-8');
+    const masterFile = fs.existsSync('nsdl_master.csv') ? 'nsdl_master.csv' : (fs.existsSync('List_of_securities.csv') ? 'List_of_securities.csv' : null);
+    
+    if (masterFile) {
+      log(`Found ${masterFile}! Merging structural details...`);
+      const nsdlText = fs.readFileSync(masterFile, 'utf-8');
       const lines = nsdlText.split('\n');
       if (lines.length > 1) {
         const headers = lines[0].split(',').map(h => h.trim().toUpperCase());
@@ -488,6 +490,8 @@ async function main() {
         const issueIdx = headers.findIndex(h => h.includes('ALLOTMENT') || h.includes('ISSUE DATE'));
         const matIdx = headers.findIndex(h => h.includes('MATURITY') || h.includes('REDEMPTION'));
         const freqIdx = headers.findIndex(h => h.includes('FREQUENCY') || h.includes('INTEREST PAYMENT'));
+        const ratingIdx = headers.findIndex(h => h.includes('CREDIT RATING'));
+        const fvIdx = headers.findIndex(h => h.includes('FACE VALUE'));
 
         if (isinIdx !== -1) {
           let mergedCount = 0;
@@ -501,16 +505,82 @@ async function main() {
                 if (issueIdx !== -1 && cols[issueIdx]) bond.issueDate = cols[issueIdx];
                 if (matIdx !== -1 && cols[matIdx]) bond.maturityDate = cols[matIdx];
                 if (freqIdx !== -1 && cols[freqIdx]) bond.frequency = cols[freqIdx];
+                if (ratingIdx !== -1 && cols[ratingIdx]) bond.rating = cols[ratingIdx].split(';')[0]; // Take first rating
+                if (fvIdx !== -1 && cols[fvIdx]) bond.faceValue = parseFloat(cols[fvIdx]) || bond.faceValue;
                 mergedCount++;
               }
             }
           }
-          ok(`Merged structural details for ${mergedCount} bonds from NSDL Master.`);
+          ok(`Merged structural details for ${mergedCount} bonds from ${masterFile}.`);
+        }
+      }
+    }
+
+    // Try WDM List
+    const wdmFile = process.argv.find(a => a.toLowerCase().includes('wdm')) || 'wdmlist.csv';
+    if (fs.existsSync(wdmFile)) {
+      log(`Found WDM list at ${wdmFile}! Merging structural details...`);
+      const wdmText = fs.readFileSync(wdmFile, 'utf-8');
+      const lines = wdmText.split('\n');
+      if (lines.length > 1) {
+        const headers = lines[0].split(',').map(h => h.trim().toUpperCase());
+        const isinIdx = headers.findIndex(h => h.includes('ISIN'));
+        const issueNameIdx = headers.findIndex(h => h === 'ISSUE_NAME');
+        const issueDateIdx = headers.findIndex(h => h === 'ISSUE_DATE');
+        const matDateIdx = headers.findIndex(h => h === 'MAT_DATE');
+        const freqIdx = headers.findIndex(h => h === 'CPN FREQ');
+        const priceIdx = headers.findIndex(h => h.includes('LAST TRADED PRICE'));
+
+        if (isinIdx !== -1) {
+          let mergedCount = 0;
+          for (let i = 1; i < lines.length; i++) {
+            // WDM CSVs might not use quotes for commas, but let's be safe
+            const cols = lines[i].split(',').map(c => c.trim().replace(/"/g, ''));
+            if (cols.length > isinIdx) {
+              const isin = cols[isinIdx];
+              let bond = bonds.find(b => b.isin === isin);
+              
+              // If bond doesn't exist, we can add it since WDM has price!
+              if (!bond) {
+                if (isin && isin.startsWith('IN')) {
+                  bond = {
+                    isin: isin,
+                    last4: isin.slice(-4),
+                    name: cols[issueNameIdx] || isin,
+                    issuer: 'NSE WDM',
+                    faceValue: 1000,
+                    couponRate: 0,
+                    maturityDate: '',
+                    issueDate: '',
+                    frequency: 'Semi-Annual',
+                    rating: '',
+                    bondType: 'Corporate',
+                    lastPrice: priceIdx !== -1 ? (parseFloat(cols[priceIdx]) || null) : null,
+                    ytm: null
+                  };
+                  bonds.push(bond);
+                }
+              }
+              
+              if (bond) {
+                if (issueNameIdx !== -1 && cols[issueNameIdx]) {
+                  const match = cols[issueNameIdx].match(/([\d\.]+)\%/);
+                  if (match) bond.couponRate = parseFloat(match[1]);
+                }
+                if (issueDateIdx !== -1 && cols[issueDateIdx]) bond.issueDate = cols[issueDateIdx];
+                if (matDateIdx !== -1 && cols[matDateIdx]) bond.maturityDate = cols[matDateIdx];
+                if (freqIdx !== -1 && cols[freqIdx]) bond.frequency = cols[freqIdx] === 'Half Yearly' ? 'Semi-Annual' : cols[freqIdx];
+                if (priceIdx !== -1 && cols[priceIdx] && !bond.lastPrice) bond.lastPrice = parseFloat(cols[priceIdx]);
+                mergedCount++;
+              }
+            }
+          }
+          ok(`Merged structural details for ${mergedCount} bonds from WDM List.`);
         }
       }
     }
   } catch (err) {
-    warn(`NSDL merge failed: ${err.message}`);
+    warn(`Structural merge failed: ${err.message}`);
   }
 
   if (bonds.length > 0) {
