@@ -499,7 +499,29 @@ async function main() {
             const cols = lines[i].split(',').map(c => c.trim().replace(/"/g, ''));
             if (cols.length > isinIdx) {
               const isin = cols[isinIdx];
-              const bond = bonds.find(b => b.isin === isin);
+              let bond = bonds.find(b => b.isin === isin);
+              
+              if (!bond) {
+                if (isin && isin.startsWith('IN')) {
+                  bond = {
+                    isin: isin,
+                    last4: isin.slice(-4),
+                    name: isin,
+                    issuer: 'Master List',
+                    faceValue: 1000,
+                    couponRate: 0,
+                    maturityDate: '',
+                    issueDate: '',
+                    frequency: 'Semi-Annual',
+                    rating: '',
+                    bondType: 'Corporate',
+                    lastPrice: null,
+                    ytm: null
+                  };
+                  bonds.push(bond);
+                }
+              }
+
               if (bond) {
                 if (couponIdx !== -1 && cols[couponIdx]) bond.couponRate = parseFloat(cols[couponIdx]) || bond.couponRate;
                 if (issueIdx !== -1 && cols[issueIdx]) bond.issueDate = cols[issueIdx];
@@ -507,11 +529,18 @@ async function main() {
                 if (freqIdx !== -1 && cols[freqIdx]) bond.frequency = cols[freqIdx];
                 if (ratingIdx !== -1 && cols[ratingIdx]) bond.rating = cols[ratingIdx].split(';')[0]; // Take first rating
                 if (fvIdx !== -1 && cols[fvIdx]) bond.faceValue = parseFloat(cols[fvIdx]) || bond.faceValue;
+                
+                const issuerNameIdx = headers.findIndex(h => h === 'NAME OF ISSUER' || h === 'ISSUER');
+                if (issuerNameIdx !== -1 && cols[issuerNameIdx]) {
+                  bond.issuer = cols[issuerNameIdx];
+                  if (bond.name === isin) bond.name = cols[issuerNameIdx]; // Use issuer as name if no better name exists
+                }
+                
                 mergedCount++;
               }
             }
           }
-          ok(`Merged structural details for ${mergedCount} bonds from ${masterFile}.`);
+          ok(`Parsed and merged details for ${bonds.length} total bonds from ${masterFile}.`);
         }
       }
     }
