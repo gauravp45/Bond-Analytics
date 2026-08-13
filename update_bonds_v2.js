@@ -591,13 +591,17 @@ async function main() {
   }
 
   // Fallback to sample database
+  // Fallback to sample database only if no database exists at all
   if (bonds.length === 0) {
-    warn('Using curated sample database (40 bonds)');
-    warn('To get full data, download CSV from NSE → run: node update_bonds.js path/to/file.csv');
-    console.log('');
-    const sampleBonds = getSampleBonds();
-    generateDatabase(sampleBonds);
-    ok(`Sample database created with ${sampleBonds.length} bonds.`);
+    warn('Market data could not be fetched.');
+    if (!fs.existsSync('bonds_database.js')) {
+      warn('Using curated sample database (47 bonds) for initial setup.');
+      const sampleBonds = getSampleBonds();
+      generateDatabase(sampleBonds);
+      ok(`Sample database created with ${sampleBonds.length} bonds.`);
+    } else {
+      warn('Keeping existing bonds_database.js to preserve previous data.');
+    }
   }
 
   console.log('');
