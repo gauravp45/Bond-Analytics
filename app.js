@@ -6549,14 +6549,23 @@ async function loadISINFromDB(isin) {
   if (modeMap[cat]) setBondMode(modeMap[cat]);
   else setBondMode('regular');
 
+  // Convert DD-MM-YYYY to YYYY-MM-DD for HTML date inputs
+  function toYMD(d) {
+    if (!d) return '';
+    if (d.includes('-') && d.split('-')[0].length === 4) return d;
+    if (d.includes('-')) { const p = d.split('-'); return `${p[2]}-${p[1]}-${p[0]}`; }
+    if (d.includes('/')) { const p = d.split('/'); return `${p[2]}-${p[1]}-${p[0]}`; }
+    return d;
+  }
+
   // Fill all fields
   if (b.name)          document.getElementById('secName').value        = b.name;
   if (b.isin)          document.getElementById('isin').value           = b.isin;
   if (b.rating)        document.getElementById('bondRating').value     = b.rating;
   if (b.couponRate)    document.getElementById('couponRate').value     = b.couponRate;
   if (b.faceValue)     document.getElementById('faceValue').value      = b.faceValue;
-  if (b.maturityDate)  document.getElementById('maturityDate').value   = b.maturityDate;
-  if (b.allotmentDate || b.issueDate) document.getElementById('allotmentDate').value = (b.allotmentDate || b.issueDate);
+  if (b.maturityDate)  document.getElementById('maturityDate').value   = toYMD(b.maturityDate);
+  if (b.allotmentDate || b.issueDate) document.getElementById('allotmentDate').value = toYMD(b.allotmentDate || b.issueDate);
   if (b.stampDuty !== undefined) document.getElementById('stampDuty').value = b.stampDuty;
 
   // IP schedule
